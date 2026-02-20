@@ -489,7 +489,7 @@ export default function Home() {
 
       {/* Vista Mobile: solo su schermi piccoli - fixed a tutto schermo, niente scroll */}
       <div className="md:hidden fixed inset-0 z-50 flex flex-col items-center justify-center bg-white p-4">
-        <h1 className="text-2xl font-semibold text-emerald-600">
+        <h1 className="text-2xl font-semibold text-slate-800">
           Vocale Sopralluogo
         </h1>
 
@@ -546,7 +546,7 @@ export default function Home() {
       <section className="max-md:!hidden md:grid md:grid-cols-2 gap-8 h-[85vh]">
         {/* Colonna sinistra: Input Dati */}
         <div className="flex flex-col gap-4 min-h-0 overflow-auto">
-          <h2 className="text-lg font-semibold text-emerald-600">Input Dati</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Input Dati</h2>
 
           {isPrezzarioMode && (
             <>
@@ -589,7 +589,7 @@ export default function Home() {
 
         {/* Colonna destra: Anteprima Computo */}
         <div className="flex flex-col gap-4 min-h-0">
-          <h2 className="text-lg font-semibold text-emerald-600">
+          <h2 className="text-lg font-semibold text-slate-800">
             Anteprima Computo
           </h2>
           <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
