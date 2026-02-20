@@ -9,5 +9,25 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Check Deploy Hook secret
+        run: |
+          if [ -z "${{ secrets.VERCEL_DEPLOY_HOOK }}" ]; then
+            echo "::error::Secret VERCEL_DEPLOY_HOOK non impostato. Vai in repo Settings > Secrets and variables > Actions e aggiungi VERCEL_DEPLOY_HOOK con l'URL del Deploy Hook di Vercel."
+            exit 1
+          fi
+          echo "Secret presente, chiamo il Deploy Hook..."
+
       - name: Trigger Vercel Deploy Hook
-        run: curl -f -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
+        id: trigger
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "::notice::Deploy avviato su Vercel. Controlla la tab Deployments."
+          else
+            echo "::error::Vercel ha risposto con status $HTTP_CODE. Verifica che l'URL del Deploy Hook sia corretto e che il progetto esista su Vercel."
+            exit 1
+          fi
