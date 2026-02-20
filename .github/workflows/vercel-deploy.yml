@@ -25,9 +25,21 @@ jobs:
           BODY=$(echo "$RESPONSE" | sed '$d')
           echo "HTTP Status: $HTTP_CODE"
           echo "Response: $BODY"
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+          echo "response_body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$BODY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
             echo "::notice::Deploy avviato su Vercel. Controlla la tab Deployments."
           else
             echo "::error::Vercel ha risposto con status $HTTP_CODE. Verifica che l'URL del Deploy Hook sia corretto e che il progetto esista su Vercel."
             exit 1
           fi
+
+      - name: Riepilogo
+        run: |
+          echo "## Risultato Deploy Hook Vercel" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **HTTP Status:** ${{ steps.trigger.outputs.http_code }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Se è 200, il deploy è stato accodato. Controlla Vercel > progetto computo-ai > Deployments (può richiedere 1-2 min)." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Se è 404/4xx, l'URL del secret VERCEL_DEPLOY_HOOK non è valido: crea un nuovo Deploy Hook nel progetto attuale e aggiorna il secret." >> "$GITHUB_STEP_SUMMARY"
