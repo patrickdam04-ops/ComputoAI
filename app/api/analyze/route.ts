@@ -1,11 +1,40 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Non autenticato" }, { status: 401 });
+    }
+
+    const { data: creditRow, error: creditError } = await supabaseAdmin
+      .from("user_credits")
+      .select("credits_balance")
+      .eq("clerk_user_id", userId)
+      .maybeSingle();
+
+    if (creditError) {
+      console.error("Credits lookup error:", creditError);
+      return NextResponse.json(
+        { error: "Impossibile verificare i crediti" },
+        { status: 500 }
+      );
+    }
+
+    const creditsBalance = Number(creditRow?.credits_balance ?? 0);
+    if (creditsBalance <= 0) {
+      return NextResponse.json(
+        { error: "Crediti esauriti. Ricarica per generare nuovi computi." },
+        { status: 403 }
+      );
+    }
+
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
     const { text, isPrezzarioMode, prezzario } = await req.json();
 
@@ -53,7 +82,22 @@ Testo del sopralluogo: ${text}`;
       .replace(/\`\`\`json/g, "")
       .replace(/\`\`\`/g, "")
       .trim();
-    return NextResponse.json(JSON.parse(textResponse));
+    const parsed = JSON.parse(textResponse);
+
+    const { error: updateError } = await supabaseAdmin
+      .from("user_credits")
+      .update({ credits_balance: creditsBalance - 1 })
+      .eq("clerk_user_id", userId);
+
+    if (updateError) {
+      console.error("Credits debit error:", updateError);
+      return NextResponse.json(
+        { error: "Analisi completata ma addebito crediti fallito" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(parsed);
   } catch (error) {
     console.error("Errore Analisi Gemini:", error);
     return NextResponse.json(

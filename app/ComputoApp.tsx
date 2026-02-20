@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 import { Mic, Download, FileUp, Square, Wand2 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import * as XLSX from "xlsx";
@@ -22,7 +22,9 @@ type ComputoRow = {
   prezzo_unitario?: string | number;
 };
 
-export default function ComputoApp() {
+export type ComputoAppProps = { creditBadge?: ReactNode };
+
+export default function ComputoApp({ creditBadge }: ComputoAppProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -324,8 +326,16 @@ export default function ComputoApp() {
       });
 
       if (!res.ok) {
+        const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+        if (res.status === 403) {
+          alert(
+            errBody.error ?? "Crediti esauriti. Ricarica per generare nuovi computi."
+          );
+          return;
+        }
         throw new Error(
-          `Errore Server: ${res.status} - Riduci la grandezza del file o del testo.`
+          errBody.error ??
+            `Errore Server: ${res.status} - Riduci la grandezza del file o del testo.`
         );
       }
 
@@ -458,7 +468,8 @@ export default function ComputoApp() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 max-md:overflow-hidden">
-      <div className="hidden md:flex w-full justify-end mb-4">
+      <div className="hidden md:flex w-full justify-end items-center gap-3 mb-4">
+        {creditBadge}
         <UserButton />
       </div>
       {/* Toggle modalità IA: valido per Mobile e Desktop */}
