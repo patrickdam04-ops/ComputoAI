@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     const creditsBalance = Number(creditRow?.credits_balance ?? 0);
     if (creditsBalance <= 0) {
       return NextResponse.json(
-        { error: "Crediti esauriti. Ricarica per generare nuovi computi." },
+        { error: "Crediti esauriti per generare il computo." },
         { status: 403 }
       );
     }

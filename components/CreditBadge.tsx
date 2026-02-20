@@ -16,7 +16,7 @@ export default async function CreditBadge() {
 
   return (
     <div
-      className={`hidden md:inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold shadow-sm ${
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold shadow-sm ${
         isLow
           ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
           : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"

@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Mic, Download, FileUp, Square, Wand2 } from "lucide-react";
-import { UserButton } from "@clerk/nextjs";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -22,9 +21,7 @@ type ComputoRow = {
   prezzo_unitario?: string | number;
 };
 
-export type ComputoAppProps = { creditBadge?: ReactNode };
-
-export default function ComputoApp({ creditBadge }: ComputoAppProps) {
+export default function ComputoApp() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -107,8 +104,14 @@ export default function ComputoApp({ creditBadge }: ComputoAppProps) {
         body: formData,
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Errore durante la trascrizione");
+        const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+        if (res.status === 403) {
+          alert(
+            errBody.error ?? "Crediti esauriti. Ricarica per trascrivere l'audio."
+          );
+          return;
+        }
+        throw new Error(errBody.error ?? "Errore durante la trascrizione");
       }
       const data = (await res.json()) as { text: string };
       setTranscription(data.text ?? "");
@@ -329,7 +332,7 @@ export default function ComputoApp({ creditBadge }: ComputoAppProps) {
         const errBody = (await res.json().catch(() => ({}))) as { error?: string };
         if (res.status === 403) {
           alert(
-            errBody.error ?? "Crediti esauriti. Ricarica per generare nuovi computi."
+            errBody.error ?? "Crediti esauriti per generare il computo."
           );
           return;
         }
@@ -468,10 +471,6 @@ export default function ComputoApp({ creditBadge }: ComputoAppProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 max-md:overflow-hidden">
-      <div className="hidden md:flex w-full justify-end items-center gap-3 mb-4">
-        {creditBadge}
-        <UserButton />
-      </div>
       {/* Toggle modalità IA: valido per Mobile e Desktop */}
       <div className="hidden md:flex mb-8 w-fit mx-auto rounded-xl bg-slate-200 p-1">
         <button
