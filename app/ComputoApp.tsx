@@ -303,7 +303,7 @@ export default function ComputoApp() {
             .sort((a, b) => b.score - a.score)
             .map((item) => item.row);
           // SERBATOIO MASSIMO: Inviamo 10000 righe per coprire tutti i sinonimi e i materiali richiesti.
-          const finalRows = sortedRows.slice(0, 10000);
+          const finalRows = sortedRows.slice(0, 4000);
           prezzarioToSend = JSON.stringify(finalRows);
           console.log(
             `[MOTORE DI RICERCA] Parole chiave 'pulite': ${keywords.join(", ")}`
