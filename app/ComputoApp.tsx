@@ -405,6 +405,7 @@ export default function ComputoApp() {
       const decoder = new TextDecoder();
       let generatedText = "";
       let parsedUpTo = 0;
+      let heartbeatStripped = false;
       const allRows: ComputoRow[] = [];
 
       while (true) {
@@ -412,6 +413,12 @@ export default function ComputoApp() {
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         generatedText += chunk;
+
+        if (!heartbeatStripped && generatedText.includes("__HEARTBEAT__\n")) {
+          generatedText = generatedText.replace("__HEARTBEAT__\n", "");
+          heartbeatStripped = true;
+          parsedUpTo = 0;
+        }
 
         const { extracted, newOffset } = extractJsonObjects(
           generatedText,

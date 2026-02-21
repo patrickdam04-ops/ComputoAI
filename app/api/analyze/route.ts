@@ -77,13 +77,18 @@ Testo del sopralluogo: ${text}`;
   Testo da analizzare: ${text}`;
     }
 
-    const result = await model.generateContentStream(prompt);
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
       async start(controller) {
+        controller.enqueue(
+          encoder.encode("__HEARTBEAT__\n")
+        );
+
         try {
-          for await (const chunk of result.stream) {
+          const geminiStream = await model.generateContentStream(prompt);
+
+          for await (const chunk of geminiStream.stream) {
             const chunkText = chunk.text();
             if (chunkText) {
               controller.enqueue(encoder.encode(chunkText));
@@ -98,18 +103,20 @@ Testo del sopralluogo: ${text}`;
           if (updateError) {
             console.error("Credits debit error:", updateError);
           }
-
-          controller.close();
         } catch (err) {
-          console.error("Stream error:", err);
-          controller.error(err);
+          console.error("Errore Gemini:", err);
+          controller.enqueue(
+            encoder.encode("\n\nSi è verificato un errore durante la generazione.")
+          );
+        } finally {
+          controller.close();
         }
       },
     });
 
     return new Response(stream, {
       headers: {
-        "Content-Type": "text/event-stream",
+        "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
       },
