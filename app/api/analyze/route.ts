@@ -3,8 +3,8 @@ import { auth } from "@clerk/nextjs/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from "@/lib/supabase";
 
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
@@ -39,8 +39,8 @@ export async function POST(req: Request) {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+
     let prompt = "";
     if (isPrezzarioMode) {
       prompt = `Sei un Computista Senior. Il tuo compito è estrarre TUTTE le lavorazioni dal testo, nessuna esclusa.
@@ -77,29 +77,43 @@ Testo del sopralluogo: ${text}`;
   Testo da analizzare: ${text}`;
     }
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let textResponse = response.text();
-    textResponse = textResponse
-      .replace(/\`\`\`json/g, "")
-      .replace(/\`\`\`/g, "")
-      .trim();
-    const parsed = JSON.parse(textResponse);
+    const result = await model.generateContentStream(prompt);
+    const encoder = new TextEncoder();
 
-    const { error: updateError } = await supabaseAdmin
-      .from("user_credits")
-      .update({ credits_balance: creditsBalance - creditCost })
-      .eq("clerk_user_id", userId);
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of result.stream) {
+            const chunkText = chunk.text();
+            if (chunkText) {
+              controller.enqueue(encoder.encode(chunkText));
+            }
+          }
 
-    if (updateError) {
-      console.error("Credits debit error:", updateError);
-      return NextResponse.json(
-        { error: "Analisi completata ma addebito crediti fallito" },
-        { status: 500 }
-      );
-    }
+          const { error: updateError } = await supabaseAdmin
+            .from("user_credits")
+            .update({ credits_balance: creditsBalance - creditCost })
+            .eq("clerk_user_id", userId);
 
-    return NextResponse.json(parsed);
+          if (updateError) {
+            console.error("Credits debit error:", updateError);
+          }
+
+          controller.close();
+        } catch (err) {
+          console.error("Stream error:", err);
+          controller.error(err);
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error) {
     console.error("Errore Analisi Gemini:", error);
     return NextResponse.json(

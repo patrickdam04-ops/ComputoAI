@@ -33,6 +33,7 @@ export default function ComputoApp() {
   const [prezzarioData, setPrezzarioData] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [includePrices, setIncludePrices] = useState<boolean>(true);
+  const [streamingText, setStreamingText] = useState("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -349,20 +350,42 @@ export default function ComputoApp() {
         );
       }
 
-      const data = (await res.json()) as
-        | ComputoRow[]
-        | { error?: string }
-        | Record<string, unknown>;
-      console.log("[RISPOSTA GEMINI]:", data);
-      if (data && typeof data === "object" && "error" in data && data.error) {
-        throw new Error(data.error as string);
+      setComputoData([]);
+      setStreamingText("");
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let generatedText = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        generatedText += chunk;
+        setStreamingText(generatedText);
+      }
+
+      console.log("[RISPOSTA GEMINI STREAM]:", generatedText);
+
+      const cleanText = generatedText
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+
+      let data: unknown;
+      try {
+        data = JSON.parse(cleanText);
+      } catch {
+        console.error("JSON parse error, raw:", cleanText);
+        alert("Errore nel parsing della risposta di Gemini.");
+        return;
       }
 
       let finalArray: ComputoRow[] = [];
       if (Array.isArray(data)) {
         finalArray = data as ComputoRow[];
       } else if (data && typeof data === "object") {
-        const key = Object.keys(data).find((k) =>
+        const key = Object.keys(data as Record<string, unknown>).find((k) =>
           Array.isArray((data as Record<string, unknown>)[k])
         );
         if (key) {
@@ -383,6 +406,7 @@ export default function ComputoApp() {
         "Si è verificato un errore durante l'analisi. Controlla la Console."
       );
     } finally {
+      setStreamingText("");
       setIsAnalyzing(false);
     }
   };
@@ -610,7 +634,16 @@ export default function ComputoApp() {
             Anteprima Computo
           </h2>
           <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-            {computoData.length === 0 ? (
+            {isAnalyzing && streamingText ? (
+              <pre className="p-4 text-sm text-slate-600 whitespace-pre-wrap font-mono leading-relaxed">
+                {streamingText}
+                <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-0.5 align-middle" />
+              </pre>
+            ) : isAnalyzing ? (
+              <p className="flex h-full items-center justify-center p-6 text-slate-500">
+                Connessione a Gemini in corso...
+              </p>
+            ) : computoData.length === 0 ? (
               <p className="flex h-full items-center justify-center p-6 text-slate-500">
                 Nessun dato analizzato
               </p>
