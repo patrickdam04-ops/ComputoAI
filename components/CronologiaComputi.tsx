@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { Download, Clock, ChevronDown, ChevronUp, Pencil, Check, X } from "lucide-react";
 import { downloadComputoExcel, type ComputoRow } from "@/lib/downloadExcel";
 
 type HistoryEntry = {
@@ -19,6 +19,8 @@ export default function CronologiaComputi({
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   useEffect(() => {
     if (!isOpen && refreshTrigger === 0) return;
@@ -40,6 +42,39 @@ export default function CronologiaComputi({
 
     fetchHistory();
   }, [isOpen, refreshTrigger]);
+
+  const startEditing = (entry: HistoryEntry) => {
+    setEditingId(entry.id);
+    setEditValue(entry.titolo);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditValue("");
+  };
+
+  const saveTitle = async () => {
+    if (!editingId || !editValue.trim()) return;
+    try {
+      const res = await fetch("/api/computi-history", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingId, titolo: editValue.trim() }),
+      });
+      if (res.ok) {
+        setEntries((prev) =>
+          prev.map((e) =>
+            e.id === editingId ? { ...e, titolo: editValue.trim() } : e
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Errore salvataggio titolo:", err);
+    } finally {
+      setEditingId(null);
+      setEditValue("");
+    }
+  };
 
   const handleDownload = async (entry: HistoryEntry) => {
     try {
@@ -144,11 +179,52 @@ export default function CronologiaComputi({
                       <td className="whitespace-nowrap py-2.5 pr-4 text-slate-500">
                         {formatDate(entry.created_at)}
                       </td>
-                      <td
-                        className="max-w-[300px] truncate py-2.5 pr-4 text-slate-700"
-                        title={entry.titolo}
-                      >
-                        {entry.titolo}
+                      <td className="max-w-[300px] py-2.5 pr-4">
+                        {editingId === entry.id ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveTitle();
+                                if (e.key === "Escape") cancelEditing();
+                              }}
+                              className="w-full rounded border border-slate-300 px-2 py-1 text-sm text-slate-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={saveTitle}
+                              className="rounded p-1 text-emerald-600 hover:bg-emerald-50"
+                            >
+                              <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEditing}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-100"
+                            >
+                              <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="group flex items-center gap-1.5">
+                            <span
+                              className="truncate text-slate-700"
+                              title={entry.titolo}
+                            >
+                              {entry.titolo}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => startEditing(entry)}
+                              className="shrink-0 rounded p-1 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:bg-slate-100 hover:text-slate-500"
+                            >
+                              <Pencil className="h-3 w-3" strokeWidth={2} />
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="py-2.5 pr-4">
                         <span

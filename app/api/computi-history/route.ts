@@ -35,3 +35,46 @@ export async function GET() {
     );
   }
 }
+
+export async function PATCH(req: Request) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Non autenticato" }, { status: 401 });
+    }
+
+    const { id, titolo } = (await req.json()) as {
+      id: string;
+      titolo: string;
+    };
+
+    if (!id || !titolo?.trim()) {
+      return NextResponse.json(
+        { error: "ID e titolo sono obbligatori" },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await supabaseAdmin
+      .from("computi_history")
+      .update({ titolo: titolo.trim() })
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("Error updating titolo:", error);
+      return NextResponse.json(
+        { error: "Errore nell'aggiornamento del titolo" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("computi-history PATCH error:", error);
+    return NextResponse.json(
+      { error: "Errore interno" },
+      { status: 500 }
+    );
+  }
+}
