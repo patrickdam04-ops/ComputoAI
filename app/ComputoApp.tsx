@@ -470,7 +470,7 @@ export default function ComputoApp() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 max-md:overflow-hidden">
+    <div className="w-full min-h-screen bg-slate-50 p-4 md:p-8 max-md:overflow-hidden">
       {/* Toggle modalità IA: valido per Mobile e Desktop */}
       <div className="hidden md:flex mb-8 w-fit mx-auto rounded-xl bg-slate-200 p-1">
         <button
