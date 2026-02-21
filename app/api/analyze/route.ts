@@ -13,6 +13,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Non autenticato" }, { status: 401 });
     }
 
+    const { text, isPrezzarioMode, prezzario } = await req.json();
+    const creditCost = isPrezzarioMode ? 10 : 1;
+
     const { data: creditRow, error: creditError } = await supabaseAdmin
       .from("user_credits")
       .select("credits_balance")
@@ -28,15 +31,14 @@ export async function POST(req: Request) {
     }
 
     const creditsBalance = Number(creditRow?.credits_balance ?? 0);
-    if (creditsBalance <= 0) {
-      return NextResponse.json(
-        { error: "Crediti esauriti per generare il computo." },
-        { status: 403 }
-      );
+    if (creditsBalance < creditCost) {
+      const msg = isPrezzarioMode
+        ? "Crediti insufficienti. La modalità Bonus e Prezzari richiede 10 crediti. Ricarica per continuare."
+        : "Crediti esauriti per generare il computo.";
+      return NextResponse.json({ error: msg }, { status: 403 });
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-    const { text, isPrezzarioMode, prezzario } = await req.json();
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
     let prompt = "";
@@ -86,7 +88,7 @@ Testo del sopralluogo: ${text}`;
 
     const { error: updateError } = await supabaseAdmin
       .from("user_credits")
-      .update({ credits_balance: creditsBalance - 1 })
+      .update({ credits_balance: creditsBalance - creditCost })
       .eq("clerk_user_id", userId);
 
     if (updateError) {
