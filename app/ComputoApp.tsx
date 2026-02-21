@@ -310,12 +310,13 @@ export default function ComputoApp() {
               });
           }
 
-          prezzarioToSend = JSON.stringify(winnerRows);
+          const cappedRows = winnerRows.slice(0, 12000);
+          prezzarioToSend = JSON.stringify(cappedRows);
           console.log(
             `[MOTORE DI RICERCA] Parole chiave 'pulite': ${keywords.join(", ")}`
           );
           console.log(
-            `[MOTORE DI RICERCA] Righe dinamiche inviate a Gemini: ${winnerRows.length}`
+            `[MOTORE DI RICERCA] Righe dinamiche inviate a Gemini: ${cappedRows.length} (cap 12000)`
           );
         }
       } catch (e) {
