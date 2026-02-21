@@ -285,31 +285,37 @@ export default function ComputoApp() {
         const keywords = rawKeywords.filter((kw) => !stopWords.includes(kw));
 
         if (keywords.length > 0) {
-          const scoredRows = parsed.map((row) => {
-            const desc = (row.rawText ?? "").toLowerCase();
-            let score = 0;
-            keywords.forEach((kw) => {
-              if (
-                desc.includes(kw) ||
-                desc.includes(kw.slice(0, -1))
-              ) {
-                score++;
-              }
+          const winnerSet = new Set<number>();
+          const winnerRows: { rawText?: string }[] = [];
+
+          for (const kw of keywords) {
+            const stem = kw.slice(0, -1);
+            const scored = parsed.map((row, idx) => {
+              const desc = (row.rawText ?? "").toLowerCase();
+              let score = 0;
+              if (desc.includes(kw)) score += 2;
+              else if (desc.includes(stem)) score += 1;
+              return { idx, row, score };
             });
-            return { row, score };
-          });
-          const sortedRows = scoredRows
-            .filter((item) => item.score > 0)
-            .sort((a, b) => b.score - a.score)
-            .map((item) => item.row);
-          // SERBATOIO MASSIMO: Inviamo 10000 righe per coprire tutti i sinonimi e i materiali richiesti.
-          const finalRows = sortedRows.slice(0, 1000);
-          prezzarioToSend = JSON.stringify(finalRows);
+
+            scored
+              .filter((r) => r.score > 0)
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 5)
+              .forEach((r) => {
+                if (!winnerSet.has(r.idx)) {
+                  winnerSet.add(r.idx);
+                  winnerRows.push(r.row);
+                }
+              });
+          }
+
+          prezzarioToSend = JSON.stringify(winnerRows);
           console.log(
             `[MOTORE DI RICERCA] Parole chiave 'pulite': ${keywords.join(", ")}`
           );
           console.log(
-            `[MOTORE DI RICERCA] Inviate le ${finalRows.length} righe più pertinenti a Gemini.`
+            `[MOTORE DI RICERCA] Righe dinamiche inviate a Gemini: ${winnerRows.length}`
           );
         }
       } catch (e) {
