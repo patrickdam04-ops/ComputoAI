@@ -11,16 +11,16 @@ export default async function Home() {
         <RedirectToSignIn />
       </SignedOut>
       <SignedIn>
-        <div className="min-h-screen flex flex-col bg-slate-50">
-          <header className="flex w-full justify-between items-center p-4 bg-white shadow-sm border-b z-50">
+        <div className="min-h-screen bg-slate-50 relative">
+          <header className="fixed top-0 left-0 w-full bg-white shadow-md border-b z-[100] flex justify-between items-center px-4 md:px-8 h-16">
             <h1 className="text-xl font-bold text-slate-800">Computo AI</h1>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <CreditBadge />
               <UserButton afterSignOutUrl="/" />
             </div>
           </header>
 
-          <main className="flex-grow p-4 md:p-8 max-md:overflow-hidden">
+          <main className="pt-24 pb-12 px-4 md:px-8 w-full max-w-5xl mx-auto flex flex-col items-center">
             <ComputoApp />
           </main>
         </div>
