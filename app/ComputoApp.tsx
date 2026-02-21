@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Mic, Download, FileUp, Square, Wand2 } from "lucide-react";
 import * as XLSX from "xlsx";
-import ExcelJS from "exceljs";
-import { saveAs } from "file-saver";
+import CronologiaComputi from "@/components/CronologiaComputi";
+import { downloadComputoExcel } from "@/lib/downloadExcel";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -80,6 +80,8 @@ export default function ComputoApp() {
   const [fileName, setFileName] = useState<string>("");
   const [includePrices, setIncludePrices] = useState<boolean>(true);
   const [streamingRows, setStreamingRows] = useState<ComputoRow[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
 
   const previewScrollRef = useRef<HTMLDivElement>(null);
 
@@ -456,6 +458,12 @@ export default function ComputoApp() {
       }
 
       setComputoData(allRows);
+
+      if (allRows.length > 0) {
+        setHistoryRefresh((n) => n + 1);
+        setToast("Computo salvato automaticamente nella tua cronologia");
+        setTimeout(() => setToast(null), 4000);
+      }
     } catch (error) {
       console.error("Errore chiamata API:", error);
       alert(
@@ -468,83 +476,7 @@ export default function ComputoApp() {
   };
 
   const handleDownloadExcel = async () => {
-    if (computoData.length === 0) return;
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Computo");
-
-    if (isPrezzarioMode) {
-      worksheet.columns = [
-        { header: "Codice Ufficiale", key: "codice", width: 18 },
-        { header: "Categoria", key: "categoria", width: 25 },
-        { header: "Descrizione Tecnica", key: "descrizione", width: 80 },
-        { header: "U.M.", key: "um", width: 8 },
-        { header: "Quantità", key: "quantita", width: 12 },
-        { header: "Prezzo Unitario (€)", key: "prezzo", width: 18 },
-        { header: "Totale (€)", key: "totale", width: 18 },
-      ];
-    } else {
-      worksheet.columns = [
-        { header: "Categoria", key: "categoria", width: 25 },
-        { header: "Descrizione Tecnica", key: "descrizione", width: 80 },
-        { header: "U.M.", key: "um", width: 8 },
-        { header: "Quantità", key: "quantita", width: 12 },
-      ];
-    }
-
-    computoData.forEach((item) => {
-      if (isPrezzarioMode) {
-        const isDaCercare =
-          String(item.prezzo_unitario ?? "").toUpperCase() === "DA CERCARE";
-        const prezzo =
-          parseFloat(String(item.prezzo_unitario ?? "")) || 0;
-        const quantita = parseFloat(String(item.quantita ?? 0)) || 0;
-        const totale = (prezzo * quantita).toFixed(2);
-        worksheet.addRow({
-          codice: item.codice || "",
-          categoria: item.categoria || "",
-          descrizione: item.descrizione || "",
-          um: item.um || "",
-          quantita,
-          prezzo: includePrices
-            ? isDaCercare
-              ? "DA CERCARE"
-              : prezzo > 0
-                ? prezzo
-                : ""
-            : "",
-          totale: includePrices
-            ? isDaCercare
-              ? "DA CERCARE"
-              : prezzo > 0
-                ? parseFloat(totale)
-                : ""
-            : "",
-        });
-      } else {
-        worksheet.addRow({
-          categoria: item.categoria || "",
-          descrizione: item.descrizione || "",
-          um: item.um || "",
-          quantita: item.quantita ?? 1,
-        });
-      }
-    });
-
-    worksheet.eachRow((row, rowNumber) => {
-      row.eachCell((cell) => {
-        cell.alignment = { wrapText: true, vertical: "top" as const };
-        if (rowNumber === 1) {
-          cell.font = { bold: true };
-        }
-      });
-    });
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    saveAs(blob, "Computo_Metrico_Professionale.xlsx");
+    await downloadComputoExcel(computoData, isPrezzarioMode, includePrices);
   };
 
   useEffect(() => {
@@ -799,6 +731,15 @@ export default function ComputoApp() {
           </button>
         </div>
       </section>
+
+      <CronologiaComputi refreshTrigger={historyRefresh} />
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white shadow-lg transition-opacity">
+          <span>✓</span>
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

@@ -87,10 +87,12 @@ Testo del sopralluogo: ${text}`;
 
         try {
           const geminiStream = await model.generateContentStream(prompt);
+          let fullText = "";
 
           for await (const chunk of geminiStream.stream) {
             const chunkText = chunk.text();
             if (chunkText) {
+              fullText += chunkText;
               controller.enqueue(encoder.encode(chunkText));
             }
           }
@@ -103,10 +105,32 @@ Testo del sopralluogo: ${text}`;
           if (updateError) {
             console.error("Credits debit error:", updateError);
           }
+
+          try {
+            const cleanJson = fullText
+              .replace(/```json/g, "")
+              .replace(/```/g, "")
+              .trim();
+            const parsed = JSON.parse(cleanJson);
+            const titolo =
+              text.substring(0, 80).trim() +
+              (text.length > 80 ? "..." : "");
+
+            await supabaseAdmin.from("computi_history").insert({
+              clerk_user_id: userId,
+              titolo,
+              contenuto_json: parsed,
+              is_prezzario_mode: isPrezzarioMode,
+            });
+          } catch (saveErr) {
+            console.error("Error saving to computi_history:", saveErr);
+          }
         } catch (err) {
           console.error("Errore Gemini:", err);
           controller.enqueue(
-            encoder.encode("\n\nSi è verificato un errore durante la generazione.")
+            encoder.encode(
+              "\n\nSi è verificato un errore durante la generazione."
+            )
           );
         } finally {
           controller.close();
