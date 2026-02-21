@@ -3,17 +3,18 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 export default async function CreditBadge() {
   const { userId } = await auth();
-  if (!userId) return null;
 
-  const { data: row, error } = await supabaseAdmin
-    .from("user_credits")
-    .select("credits_balance")
-    .eq("clerk_user_id", userId)
-    .maybeSingle();
+  let balance = 0;
+  if (userId) {
+    const { data: row, error } = await supabaseAdmin
+      .from("user_credits")
+      .select("credits_balance")
+      .eq("clerk_user_id", userId)
+      .maybeSingle();
+    balance = error || !row ? 0 : Number(row.credits_balance ?? 0);
+  }
 
-  const balance = error || !row ? 0 : Number(row.credits_balance ?? 0);
   const isLow = balance <= 0;
-
   return (
     <div
       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold shadow-sm ${
@@ -23,7 +24,7 @@ export default async function CreditBadge() {
       }`}
     >
       <span aria-hidden>⚡</span>
-      <span>Crediti: {balance}</span>
+      <span>{balance === 0 ? "0 Crediti" : `Crediti: ${balance}`}</span>
     </div>
   );
 }
