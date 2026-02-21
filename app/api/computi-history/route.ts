@@ -13,8 +13,8 @@ export async function GET() {
 
     const { data, error } = await supabaseAdmin
       .from("computi_history")
-      .select("id, titolo, is_prezzario_mode, created_at, contenuto_json")
-      .eq("clerk_user_id", userId)
+      .select("id, titolo, created_at, contenuto_testo")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(30);
 

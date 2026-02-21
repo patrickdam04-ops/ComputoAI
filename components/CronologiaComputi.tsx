@@ -7,9 +7,8 @@ import { downloadComputoExcel, type ComputoRow } from "@/lib/downloadExcel";
 type HistoryEntry = {
   id: string;
   titolo: string;
-  is_prezzario_mode: boolean;
   created_at: string;
-  contenuto_json: ComputoRow[];
+  contenuto_testo: string;
 };
 
 export default function CronologiaComputi({
@@ -43,10 +42,31 @@ export default function CronologiaComputi({
   }, [isOpen, refreshTrigger]);
 
   const handleDownload = async (entry: HistoryEntry) => {
-    await downloadComputoExcel(
-      entry.contenuto_json,
-      entry.is_prezzario_mode
-    );
+    try {
+      const rows = JSON.parse(entry.contenuto_testo) as ComputoRow[];
+      const isPrezzario = rows.length > 0 && "codice" in rows[0];
+      await downloadComputoExcel(rows, isPrezzario);
+    } catch (err) {
+      console.error("Errore download Excel:", err);
+      alert("Errore nel download del file.");
+    }
+  };
+
+  const getRowCount = (entry: HistoryEntry): number => {
+    try {
+      return (JSON.parse(entry.contenuto_testo) as unknown[]).length;
+    } catch {
+      return 0;
+    }
+  };
+
+  const getMode = (entry: HistoryEntry): string => {
+    try {
+      const rows = JSON.parse(entry.contenuto_testo) as ComputoRow[];
+      return rows.length > 0 && "codice" in rows[0] ? "Prezzario" : "Libero";
+    } catch {
+      return "—";
+    }
   };
 
   const formatDate = (iso: string) => {
@@ -133,18 +153,16 @@ export default function CronologiaComputi({
                       <td className="py-2.5 pr-4">
                         <span
                           className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                            entry.is_prezzario_mode
+                            getMode(entry) === "Prezzario"
                               ? "bg-blue-50 text-blue-700"
                               : "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          {entry.is_prezzario_mode
-                            ? "Prezzario"
-                            : "Libero"}
+                          {getMode(entry)}
                         </span>
                       </td>
                       <td className="py-2.5 pr-4 text-slate-500">
-                        {entry.contenuto_json?.length ?? 0}
+                        {getRowCount(entry)}
                       </td>
                       <td className="py-2.5 text-right">
                         <button

@@ -111,16 +111,15 @@ Testo del sopralluogo: ${text}`;
               .replace(/```json/g, "")
               .replace(/```/g, "")
               .trim();
-            const parsed = JSON.parse(cleanJson);
+            JSON.parse(cleanJson);
             const titolo =
               text.substring(0, 80).trim() +
               (text.length > 80 ? "..." : "");
 
             await supabaseAdmin.from("computi_history").insert({
-              clerk_user_id: userId,
+              user_id: userId,
               titolo,
-              contenuto_json: parsed,
-              is_prezzario_mode: isPrezzarioMode,
+              contenuto_testo: cleanJson,
             });
           } catch (saveErr) {
             console.error("Error saving to computi_history:", saveErr);
