@@ -69,6 +69,15 @@ export async function POST(req: Request) {
       );
     }
 
+    try {
+      await supabaseAdmin.from("transcriptions").insert({
+        user_id: userId,
+        content: transcription.text,
+      });
+    } catch (saveErr) {
+      console.error("Error saving transcription:", saveErr);
+    }
+
     return NextResponse.json({ text: transcription.text });
   } catch (error) {
     console.error("Errore Whisper:", error);

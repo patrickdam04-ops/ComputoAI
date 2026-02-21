@@ -1,4 +1,5 @@
 import { SignedIn, SignedOut, RedirectToSignIn, UserButton } from "@clerk/nextjs";
+import Link from "next/link";
 import ComputoApp from "./ComputoApp";
 import CreditBadge from "@/components/CreditBadge";
 
@@ -15,6 +16,12 @@ export default async function Home() {
           <header className="fixed top-0 left-0 w-full bg-white shadow-md border-b z-[100] flex justify-between items-center px-4 md:px-8 h-16">
             <h1 className="text-xl font-bold text-slate-800">Computo AI</h1>
             <div className="flex items-center gap-3">
+              <Link
+                href="/archivio"
+                className="hidden md:inline-flex rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
+              >
+                Archivio
+              </Link>
               <CreditBadge />
               <UserButton afterSignOutUrl="/" />
             </div>
