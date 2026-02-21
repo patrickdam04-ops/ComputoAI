@@ -20,7 +20,7 @@ export default async function Home() {
             </div>
           </header>
 
-          <main className="pt-24 pb-12 px-4 md:px-8 w-full max-w-5xl mx-auto flex flex-col items-center">
+          <main className="pt-24 pb-12 px-4 md:px-8 w-full flex flex-col items-center">
             <ComputoApp />
           </main>
         </div>
