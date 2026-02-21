@@ -21,6 +21,52 @@ type ComputoRow = {
   prezzo_unitario?: string | number;
 };
 
+function extractJsonObjects(text: string, startFrom: number) {
+  const extracted: ComputoRow[] = [];
+  let i = startFrom;
+
+  while (i < text.length) {
+    if (text[i] === "{") {
+      let depth = 0;
+      let inString = false;
+      let j = i;
+
+      while (j < text.length) {
+        const ch = text[j];
+        if (inString) {
+          if (ch === "\\" && j + 1 < text.length) {
+            j++;
+          } else if (ch === '"') {
+            inString = false;
+          }
+        } else {
+          if (ch === '"') inString = true;
+          else if (ch === "{") depth++;
+          else if (ch === "}") {
+            depth--;
+            if (depth === 0) {
+              try {
+                const obj = JSON.parse(text.substring(i, j + 1));
+                extracted.push(obj as ComputoRow);
+              } catch {
+                /* incomplete or malformed */
+              }
+              i = j + 1;
+              break;
+            }
+          }
+        }
+        j++;
+      }
+      if (depth !== 0) break;
+    } else {
+      i++;
+    }
+  }
+
+  return { extracted, newOffset: i };
+}
+
 export default function ComputoApp() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -33,7 +79,9 @@ export default function ComputoApp() {
   const [prezzarioData, setPrezzarioData] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [includePrices, setIncludePrices] = useState<boolean>(true);
-  const [streamingText, setStreamingText] = useState("");
+  const [streamingRows, setStreamingRows] = useState<ComputoRow[]>([]);
+
+  const previewScrollRef = useRef<HTMLDivElement>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -351,62 +399,63 @@ export default function ComputoApp() {
       }
 
       setComputoData([]);
-      setStreamingText("");
+      setStreamingRows([]);
 
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let generatedText = "";
+      let parsedUpTo = 0;
+      const allRows: ComputoRow[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         generatedText += chunk;
-        setStreamingText(generatedText);
-      }
 
-      console.log("[RISPOSTA GEMINI STREAM]:", generatedText);
-
-      const cleanText = generatedText
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
-
-      let data: unknown;
-      try {
-        data = JSON.parse(cleanText);
-      } catch {
-        console.error("JSON parse error, raw:", cleanText);
-        alert("Errore nel parsing della risposta di Gemini.");
-        return;
-      }
-
-      let finalArray: ComputoRow[] = [];
-      if (Array.isArray(data)) {
-        finalArray = data as ComputoRow[];
-      } else if (data && typeof data === "object") {
-        const key = Object.keys(data as Record<string, unknown>).find((k) =>
-          Array.isArray((data as Record<string, unknown>)[k])
+        const { extracted, newOffset } = extractJsonObjects(
+          generatedText,
+          parsedUpTo
         );
-        if (key) {
-          finalArray = (data as Record<string, unknown>)[key] as ComputoRow[];
+        if (extracted.length > 0) {
+          parsedUpTo = newOffset;
+          allRows.push(...extracted);
+          setStreamingRows([...allRows]);
         }
       }
 
-      if (finalArray.length === 0) {
+      console.log("[RISPOSTA GEMINI STREAM]:", allRows.length, "righe");
+
+      if (allRows.length === 0) {
+        const cleanText = generatedText
+          .replace(/```json/g, "")
+          .replace(/```/g, "")
+          .trim();
+        try {
+          const data = JSON.parse(cleanText);
+          const arr = Array.isArray(data) ? data : [];
+          if (arr.length > 0) {
+            allRows.push(...(arr as ComputoRow[]));
+          }
+        } catch {
+          console.error("JSON parse error, raw:", cleanText);
+        }
+      }
+
+      if (allRows.length === 0) {
         alert(
           "Attenzione: Gemini non ha trovato voci corrispondenti o ha restituito un formato errato."
         );
       }
 
-      setComputoData(finalArray);
+      setComputoData(allRows);
     } catch (error) {
       console.error("Errore chiamata API:", error);
       alert(
         "Si è verificato un errore durante l'analisi. Controlla la Console."
       );
     } finally {
-      setStreamingText("");
+      setStreamingRows([]);
       setIsAnalyzing(false);
     }
   };
@@ -491,7 +540,13 @@ export default function ComputoApp() {
     saveAs(blob, "Computo_Metrico_Professionale.xlsx");
   };
 
-  // Cleanup timer on unmount or when recording stops
+  useEffect(() => {
+    if (previewScrollRef.current) {
+      previewScrollRef.current.scrollTop =
+        previewScrollRef.current.scrollHeight;
+    }
+  }, [streamingRows]);
+
   useEffect(() => {
     return () => {
       if (recordingIntervalRef.current) {
@@ -633,49 +688,71 @@ export default function ComputoApp() {
           <h2 className="text-lg font-semibold text-slate-800">
             Anteprima Computo
           </h2>
-          <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-            {isAnalyzing && streamingText ? (
-              <pre className="p-4 text-sm text-slate-600 whitespace-pre-wrap font-mono leading-relaxed">
-                {streamingText}
-                <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-0.5 align-middle" />
-              </pre>
-            ) : isAnalyzing ? (
-              <p className="flex h-full items-center justify-center p-6 text-slate-500">
-                Connessione a Gemini in corso...
-              </p>
-            ) : computoData.length === 0 ? (
-              <p className="flex h-full items-center justify-center p-6 text-slate-500">
-                Nessun dato analizzato
-              </p>
-            ) : (
-              <table className="w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="p-3 font-semibold text-slate-700">
-                      Categoria
-                    </th>
-                    <th className="p-3 font-semibold text-slate-700">
-                      Descrizione
-                    </th>
-                    <th className="p-3 font-semibold text-slate-700">U.M.</th>
-                    <th className="p-3 font-semibold text-slate-700">Q.tà</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {computoData.map((row, i) => (
-                    <tr
-                      key={i}
-                      className="border-b border-slate-100 hover:bg-slate-50/50"
-                    >
-                      <td className="p-3 text-slate-700">{row.categoria}</td>
-                      <td className="p-3 text-slate-700">{row.descrizione}</td>
-                      <td className="p-3 text-slate-600">{row.um}</td>
-                      <td className="p-3 text-slate-600">{row.quantita}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          <div
+            ref={previewScrollRef}
+            className="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm"
+          >
+            {(() => {
+              const displayRows = isAnalyzing ? streamingRows : computoData;
+              if (displayRows.length === 0) {
+                return (
+                  <p className="flex h-full items-center justify-center p-6 text-slate-500">
+                    {isAnalyzing
+                      ? "Connessione a Gemini in corso..."
+                      : "Nessun dato analizzato"}
+                  </p>
+                );
+              }
+              return (
+                <>
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <th className="p-3 font-semibold text-slate-700">
+                          Categoria
+                        </th>
+                        <th className="p-3 font-semibold text-slate-700">
+                          Descrizione
+                        </th>
+                        <th className="p-3 font-semibold text-slate-700">
+                          U.M.
+                        </th>
+                        <th className="p-3 font-semibold text-slate-700">
+                          Q.tà
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayRows.map((row, i) => (
+                        <tr
+                          key={i}
+                          className={`border-b border-slate-100 transition-colors duration-300 ${
+                            isAnalyzing && i === displayRows.length - 1
+                              ? "bg-blue-50/60"
+                              : "hover:bg-slate-50/50"
+                          }`}
+                        >
+                          <td className="p-3 text-slate-700">
+                            {row.categoria}
+                          </td>
+                          <td className="p-3 text-slate-700">
+                            {row.descrizione}
+                          </td>
+                          <td className="p-3 text-slate-600">{row.um}</td>
+                          <td className="p-3 text-slate-600">{row.quantita}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {isAnalyzing && (
+                    <div className="flex items-center justify-center gap-2 py-3 text-sm text-blue-600">
+                      <span className="inline-block h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                      Generazione in corso... ({displayRows.length} voci)
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
           {isPrezzarioMode && computoData.length > 0 && (
             <div className="mb-4 flex items-center justify-center">
