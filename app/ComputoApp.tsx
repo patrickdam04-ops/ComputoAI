@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Mic, Download, FileUp, Square, Wand2 } from "lucide-react";
 import * as XLSX from "xlsx";
-import CronologiaComputi from "@/components/CronologiaComputi";
 import { downloadComputoExcel } from "@/lib/downloadExcel";
 import { useCredits } from "@/providers/CreditsContext";
 
@@ -83,7 +82,6 @@ export default function ComputoApp() {
   const [includePrices, setIncludePrices] = useState<boolean>(true);
   const [streamingRows, setStreamingRows] = useState<ComputoRow[]>([]);
   const [toast, setToast] = useState<string | null>(null);
-  const [historyRefresh, setHistoryRefresh] = useState(0);
 
   const previewScrollRef = useRef<HTMLDivElement>(null);
 
@@ -464,8 +462,7 @@ export default function ComputoApp() {
 
       if (allRows.length > 0) {
         deductCredits(isPrezzarioMode ? 10 : 1);
-        setHistoryRefresh((n) => n + 1);
-        setToast("Computo salvato automaticamente nella tua cronologia");
+        setToast("Computo salvato. Trovalo in Archivio → Computi.");
         setTimeout(() => setToast(null), 4000);
       }
     } catch (error) {
@@ -738,8 +735,6 @@ export default function ComputoApp() {
           </button>
         </div>
       </section>
-
-      <CronologiaComputi refreshTrigger={historyRefresh} />
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white shadow-lg transition-opacity">

@@ -40,6 +40,8 @@ export default function ArchivioPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [editingTrId, setEditingTrId] = useState<string | null>(null);
+  const [editTrValue, setEditTrValue] = useState("");
 
   useEffect(() => {
     async function fetchTr() {
@@ -150,6 +152,32 @@ export default function ArchivioPage() {
     }
   };
 
+  const saveTranscriptionTitle = async () => {
+    if (!editingTrId) return;
+    const value = editTrValue.trim();
+    try {
+      const res = await fetch("/api/transcriptions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingTrId, project_name: value || "Sopralluogo senza nome" }),
+      });
+      if (res.ok) {
+        setTranscriptions((prev) =>
+          prev.map((t) =>
+            t.id === editingTrId
+              ? { ...t, project_name: value || "Sopralluogo senza nome" }
+              : t
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Errore salvataggio titolo trascrizione:", err);
+    } finally {
+      setEditingTrId(null);
+      setEditTrValue("");
+    }
+  };
+
   const handleDownloadComputo = async (entry: ComputoEntry) => {
     try {
       const rows = JSON.parse(entry.contenuto_testo) as ComputoRow[];
@@ -240,20 +268,75 @@ export default function ArchivioPage() {
                     key={t.id}
                     className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
                   >
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {formatDate(t.created_at)}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {formatTime(t.created_at)}
-                        </span>
-                        {t.project_name &&
-                          t.project_name !== "Sopralluogo senza nome" && (
-                            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                              {t.project_name}
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        {editingTrId === t.id ? (
+                          <div className="flex flex-1 items-center gap-1">
+                            <input
+                              type="text"
+                              value={editTrValue}
+                              onChange={(e) => setEditTrValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveTranscriptionTitle();
+                                if (e.key === "Escape") {
+                                  setEditingTrId(null);
+                                  setEditTrValue("");
+                                }
+                              }}
+                              className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                              placeholder="Titolo trascrizione"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={saveTranscriptionTitle}
+                              className="rounded p-1 text-emerald-600 hover:bg-emerald-50"
+                            >
+                              <CheckIcon className="h-4 w-4" strokeWidth={2.5} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTrId(null);
+                                setEditTrValue("");
+                              }}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-200"
+                            >
+                              <X className="h-4 w-4" strokeWidth={2.5} />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <span
+                              className="truncate text-sm font-semibold text-slate-900"
+                              title={
+                                t.project_name &&
+                                t.project_name !== "Sopralluogo senza nome"
+                                  ? t.project_name
+                                  : `Trascrizione ${formatDate(t.created_at)}`
+                              }
+                            >
+                              {t.project_name &&
+                              t.project_name !== "Sopralluogo senza nome"
+                                ? t.project_name
+                                : `Trascrizione ${formatDate(t.created_at)}`}
                             </span>
-                          )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTrId(t.id);
+                                setEditTrValue(
+                                  t.project_name !== "Sopralluogo senza nome"
+                                    ? t.project_name
+                                    : ""
+                                );
+                              }}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                            >
+                              <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+                            </button>
+                          </>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -261,7 +344,7 @@ export default function ArchivioPage() {
                         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                           copiedId === t.id
                             ? "bg-emerald-100 text-emerald-700"
-                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                            : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                         }`}
                       >
                         {copiedId === t.id ? (
@@ -276,6 +359,10 @@ export default function ArchivioPage() {
                           </>
                         )}
                       </button>
+                    </div>
+                    <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+                      <span>{formatDate(t.created_at)}</span>
+                      <span>{formatTime(t.created_at)}</span>
                     </div>
                     <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
                       {t.content}

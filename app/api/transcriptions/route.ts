@@ -35,3 +35,46 @@ export async function GET() {
     );
   }
 }
+
+export async function PATCH(req: Request) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Non autenticato" }, { status: 401 });
+    }
+
+    const { id, project_name } = (await req.json()) as {
+      id: string;
+      project_name: string;
+    };
+
+    if (!id || project_name == null) {
+      return NextResponse.json(
+        { error: "ID e titolo sono obbligatori" },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await supabaseAdmin
+      .from("transcriptions")
+      .update({ project_name: String(project_name).trim() })
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("Error updating transcription:", error);
+      return NextResponse.json(
+        { error: "Errore nell'aggiornamento del titolo" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("transcriptions PATCH error:", error);
+    return NextResponse.json(
+      { error: "Errore interno" },
+      { status: 500 }
+    );
+  }
+}
