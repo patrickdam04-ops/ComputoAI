@@ -310,7 +310,7 @@ export default function ComputoApp() {
     }
   };
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     const text = transcription?.trim() ?? "";
     if (!text) {
       alert("Inserisci o registra prima un testo da analizzare!");
@@ -318,228 +318,230 @@ export default function ComputoApp() {
     }
 
     setIsAnalyzing(true);
+    await new Promise((r) => setTimeout(r, 0));
 
-    setTimeout(async () => {
-      let prezzarioToSend: string | null = prezzarioData;
+    let prezzarioToSend: string | null = prezzarioData;
 
-      if (isPrezzarioMode && prezzarioData) {
-        try {
-          const parsed = JSON.parse(prezzarioData) as { rawText?: string }[];
-          const userText = text.toLowerCase();
-          const rawKeywords = userText.match(/[a-zàèìòù]{4,}/g) || [];
-          const stopWords = [
-            "sono",
-            "circa",
-            "tutta",
-            "tutte",
-            "tutti",
-            "dalle",
-            "dalla",
-            "della",
-            "delle",
-            "dello",
-            "degli",
-            "nella",
-            "nelle",
-            "nello",
-            "negli",
-            "come",
-            "fare",
-            "fatto",
-            "piano",
-            "zona",
-            "anche",
-            "quindi",
-            "sopra",
-            "sotto",
-            "oltre",
-            "senza",
-            "hanno",
-            "abbiamo",
-            "quest",
-            "quell",
-            "perche",
-            "dobbiamo",
-            "essere",
-            "sempre",
-            "allora",
-            "siamo",
-            "nell",
-            "facciamo",
-            "guarda",
-            "ecco",
-            "dove",
-            "quando",
-            "quanto",
-            "quello",
-            "quella",
-            "diciamo",
-            "partiamo",
-            "passiamo",
-            "invece",
-            "magari",
-            "forse",
-            "almeno",
-            "calcola",
-            "aggiungi",
-            "metti",
-            "metri",
-            "quadri",
-            "cubi",
-            "lineari",
-            "centimetri",
-            "spessore",
-            "altezza",
-            "lunghezza",
-            "larghezza",
-            "totali",
-            "totale",
-            "relativo",
-            "nuovo",
-            "vecchio",
-            "esistente",
-          ];
-          const keywords = rawKeywords.filter((kw) => !stopWords.includes(kw));
-
-          if (keywords.length > 0) {
-            const winnerSet = new Set<number>();
-            const winnerRows: { rawText?: string }[] = [];
-
-            for (const kw of keywords) {
-              const stem = kw.slice(0, -1);
-              const scored = parsed.map((row, idx) => {
-                const desc = (row.rawText ?? "").toLowerCase();
-                let score = 0;
-                if (desc.includes(kw)) score += 2;
-                else if (desc.includes(stem)) score += 1;
-                return { idx, row, score };
-              });
-
-              scored
-                .filter((r) => r.score > 0)
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 5)
-                .forEach((r) => {
-                  if (!winnerSet.has(r.idx)) {
-                    winnerSet.add(r.idx);
-                    winnerRows.push(r.row);
-                  }
-                });
-            }
-
-            const cappedRows = winnerRows.slice(0, 12000);
-            prezzarioToSend = JSON.stringify(cappedRows);
-            console.log(
-              `[MOTORE DI RICERCA] Parole chiave 'pulite': ${keywords.join(", ")}`
-            );
-            console.log(
-              `[MOTORE DI RICERCA] Righe dinamiche inviate a Gemini: ${cappedRows.length} (cap 12000)`
-            );
-          }
-        } catch (e) {
-          console.error("Errore nel filtraggio:", e);
-        }
-      }
-
+    if (isPrezzarioMode && uploadedFiles.length > 0) {
       try {
-        const res = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text,
-            isPrezzarioMode,
-            prezzario: prezzarioToSend,
-          }),
-        });
+        const parsed = uploadedFiles.flatMap((f) => f.rows) as { rawText?: string }[];
+        const userText = text.toLowerCase();
+        // 1. Estrazione parole e rimozione Stop Words avanzate
+        const rawKeywords = userText.match(/[a-zàèìòù]{4,}/g) || [];
+        const stopWords = [
+          // Verbi e parole comuni del parlato
+          "sono",
+          "circa",
+          "tutta",
+          "tutte",
+          "tutti",
+          "dalle",
+          "dalla",
+          "della",
+          "delle",
+          "dello",
+          "degli",
+          "nella",
+          "nelle",
+          "nello",
+          "negli",
+          "come",
+          "fare",
+          "fatto",
+          "piano",
+          "zona",
+          "anche",
+          "quindi",
+          "sopra",
+          "sotto",
+          "oltre",
+          "senza",
+          "hanno",
+          "abbiamo",
+          "quest",
+          "quell",
+          "perche",
+          "dobbiamo",
+          "essere",
+          "sempre",
+          "allora",
+          "siamo",
+          "nell",
+          "facciamo",
+          "guarda",
+          "ecco",
+          "dove",
+          "quando",
+          "quanto",
+          "quello",
+          "quella",
+          "diciamo",
+          "partiamo",
+          "passiamo",
+          "invece",
+          "magari",
+          "forse",
+          "almeno",
+          "calcola",
+          "aggiungi",
+          "metti",
+          // Unità di misura e parole generiche da cantiere che 'inquinano' la ricerca
+          "metri",
+          "quadri",
+          "cubi",
+          "lineari",
+          "centimetri",
+          "spessore",
+          "altezza",
+          "lunghezza",
+          "larghezza",
+          "totali",
+          "totale",
+          "relativo",
+          "nuovo",
+          "vecchio",
+          "esistente",
+        ];
+        const keywords = rawKeywords.filter((kw) => !stopWords.includes(kw));
 
-        if (!res.ok) {
-          const errBody = (await res.json().catch(() => ({}))) as { error?: string };
-          if (res.status === 403) {
-            alert(
-              errBody.error ?? "Crediti esauriti per generare il computo."
-            );
-            return;
+        if (keywords.length > 0) {
+          const winnerSet = new Set<number>();
+          const winnerRows: { rawText?: string }[] = [];
+
+          for (const kw of keywords) {
+            const stem = kw.slice(0, -1);
+            const scored = parsed.map((row, idx) => {
+              const desc = (row.rawText ?? "").toLowerCase();
+              let score = 0;
+              if (desc.includes(kw)) score += 2;
+              else if (desc.includes(stem)) score += 1;
+              return { idx, row, score };
+            });
+
+            scored
+              .filter((r) => r.score > 0)
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 5)
+              .forEach((r) => {
+                if (!winnerSet.has(r.idx)) {
+                  winnerSet.add(r.idx);
+                  winnerRows.push(r.row);
+                }
+              });
           }
-          throw new Error(
-            errBody.error ??
-              `Errore Server: ${res.status} - Riduci la grandezza del file o del testo.`
+
+          const cappedRows = winnerRows.slice(0, 12000);
+          prezzarioToSend = JSON.stringify(cappedRows);
+          console.log(
+            `[MOTORE DI RICERCA] Parole chiave 'pulite': ${keywords.join(", ")}`
+          );
+          console.log(
+            `[MOTORE DI RICERCA] Righe dinamiche inviate a Gemini: ${cappedRows.length} (cap 12000)`
           );
         }
-
-        setComputoData([]);
-        setStreamingRows([]);
-
-        const reader = res.body!.getReader();
-        const decoder = new TextDecoder();
-        let generatedText = "";
-        let parsedUpTo = 0;
-        let heartbeatStripped = false;
-        const allRows: ComputoRow[] = [];
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          generatedText += chunk;
-
-          if (!heartbeatStripped && generatedText.includes("__HEARTBEAT__\n")) {
-            generatedText = generatedText.replace("__HEARTBEAT__\n", "");
-            heartbeatStripped = true;
-            parsedUpTo = 0;
-          }
-
-          const { extracted, newOffset } = extractJsonObjects(
-            generatedText,
-            parsedUpTo
-          );
-          if (extracted.length > 0) {
-            parsedUpTo = newOffset;
-            allRows.push(...extracted);
-            setStreamingRows([...allRows]);
-          }
-        }
-
-        console.log("[RISPOSTA GEMINI STREAM]:", allRows.length, "righe");
-
-        if (allRows.length === 0) {
-          const cleanText = generatedText
-            .replace(/```json/g, "")
-            .replace(/```/g, "")
-            .trim();
-          try {
-            const data = JSON.parse(cleanText);
-            const arr = Array.isArray(data) ? data : [];
-            if (arr.length > 0) {
-              allRows.push(...(arr as ComputoRow[]));
-            }
-          } catch {
-            console.error("JSON parse error, raw:", cleanText);
-          }
-        }
-
-        if (allRows.length === 0) {
-          alert(
-            "Attenzione: Gemini non ha trovato voci corrispondenti o ha restituito un formato errato."
-          );
-        }
-
-        setComputoData(allRows);
-
-        if (allRows.length > 0) {
-          deductCredits(isPrezzarioMode ? 10 : 1);
-          setToast("Computo salvato. Trovalo in Archivio → Computi.");
-          setTimeout(() => setToast(null), 4000);
-        }
-      } catch (error) {
-        console.error("Errore chiamata API:", error);
-        alert(
-          "Si è verificato un errore durante l'analisi. Controlla la Console."
-        );
-      } finally {
-        setStreamingRows([]);
-        setIsAnalyzing(false);
+      } catch (e) {
+        console.error("Errore nel filtraggio:", e);
       }
-    }, 50);
+    }
+
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          isPrezzarioMode,
+          prezzario: prezzarioToSend,
+        }),
+      });
+
+      if (!res.ok) {
+        const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+        if (res.status === 403) {
+          alert(
+            errBody.error ?? "Crediti esauriti per generare il computo."
+          );
+          return;
+        }
+        throw new Error(
+          errBody.error ??
+            `Errore Server: ${res.status} - Riduci la grandezza del file o del testo.`
+        );
+      }
+
+      setComputoData([]);
+      setStreamingRows([]);
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let generatedText = "";
+      let parsedUpTo = 0;
+      let heartbeatStripped = false;
+      const allRows: ComputoRow[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        generatedText += chunk;
+
+        if (!heartbeatStripped && generatedText.includes("__HEARTBEAT__\n")) {
+          generatedText = generatedText.replace("__HEARTBEAT__\n", "");
+          heartbeatStripped = true;
+          parsedUpTo = 0;
+        }
+
+        const { extracted, newOffset } = extractJsonObjects(
+          generatedText,
+          parsedUpTo
+        );
+        if (extracted.length > 0) {
+          parsedUpTo = newOffset;
+          allRows.push(...extracted);
+          setStreamingRows([...allRows]);
+        }
+      }
+
+      console.log("[RISPOSTA GEMINI STREAM]:", allRows.length, "righe");
+
+      if (allRows.length === 0) {
+        const cleanText = generatedText
+          .replace(/```json/g, "")
+          .replace(/```/g, "")
+          .trim();
+        try {
+          const data = JSON.parse(cleanText);
+          const arr = Array.isArray(data) ? data : [];
+          if (arr.length > 0) {
+            allRows.push(...(arr as ComputoRow[]));
+          }
+        } catch {
+          console.error("JSON parse error, raw:", cleanText);
+        }
+      }
+
+      if (allRows.length === 0) {
+        alert(
+          "Attenzione: Gemini non ha trovato voci corrispondenti o ha restituito un formato errato."
+        );
+      }
+
+      setComputoData(allRows);
+
+      if (allRows.length > 0) {
+        deductCredits(isPrezzarioMode ? 10 : 1);
+        setToast("Computo salvato. Trovalo in Archivio → Computi.");
+        setTimeout(() => setToast(null), 4000);
+      }
+    } catch (error) {
+      console.error("Errore chiamata API:", error);
+      alert(
+        "Si è verificato un errore durante l'analisi. Controlla la Console."
+      );
+    } finally {
+      setStreamingRows([]);
+      setIsAnalyzing(false);
+    }
   };
 
   const handleDownloadExcel = async () => {
