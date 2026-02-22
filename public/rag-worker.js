@@ -1,5 +1,6 @@
 // Web Worker: RAG keyword scoring for prezzario filtering.
 // Runs off the main thread to prevent UI freezes on large datasets.
+// Returns rows sorted by cumulative relevance score (most useful first).
 
 const STOP_WORDS = new Set([
   "sono","circa","tutta","tutte","tutti","dalle","dalla","della","delle","dello",
@@ -27,44 +28,56 @@ self.onmessage = function (e) {
     return;
   }
 
-  // Pre-compute lowercase descriptions once
   const descs = new Array(rows.length);
   for (let i = 0; i < rows.length; i++) {
     descs[i] = (rows[i].rawText || "").toLowerCase();
   }
 
-  const winnerSet = new Set();
-  const winnerRows = [];
+  // Track cumulative score per row index
+  const scoreMap = new Map();
+  const selectedIndices = new Set();
 
   for (const kw of keywords) {
     const stem = kw.slice(0, -1);
     const candidates = [];
 
     for (let i = 0; i < descs.length; i++) {
-      if (winnerSet.has(i)) continue;
       const d = descs[i];
       let score = 0;
       if (d.includes(kw)) score = 2;
       else if (d.includes(stem)) score = 1;
-      if (score > 0) candidates.push({ idx: i, score });
+      if (score > 0) {
+        if (selectedIndices.has(i)) {
+          scoreMap.set(i, (scoreMap.get(i) || 0) + score);
+        } else {
+          candidates.push({ idx: i, score });
+        }
+      }
     }
 
     candidates.sort((a, b) => b.score - a.score);
     const limit = Math.min(candidates.length, TOP_PER_KEYWORD);
     for (let j = 0; j < limit; j++) {
       const c = candidates[j];
-      winnerSet.add(c.idx);
-      winnerRows.push(rows[c.idx]);
+      selectedIndices.add(c.idx);
+      scoreMap.set(c.idx, (scoreMap.get(c.idx) || 0) + c.score);
     }
 
-    if (winnerRows.length >= MAX_ROWS) break;
+    if (selectedIndices.size >= MAX_ROWS) break;
   }
 
-  const capped = winnerRows.slice(0, MAX_ROWS);
+  // Build array with scores, sort by relevance (highest first)
+  const scored = [];
+  for (const idx of selectedIndices) {
+    scored.push({ idx, score: scoreMap.get(idx) || 0 });
+  }
+  scored.sort((a, b) => b.score - a.score);
+
+  const sortedRows = scored.slice(0, MAX_ROWS).map((s) => rows[s.idx]);
 
   self.postMessage({
-    filteredRows: capped,
+    filteredRows: sortedRows,
     keywords: keywords,
-    totalFiltered: capped.length,
+    totalFiltered: sortedRows.length,
   });
 };

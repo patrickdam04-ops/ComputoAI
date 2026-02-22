@@ -348,8 +348,24 @@ export default function ComputoApp() {
           }
         );
 
-        if (filtered) {
-          prezzarioToSend = JSON.stringify(filtered);
+        if (filtered && filtered.length > 0) {
+          // ~4 chars per token, cap at 800k tokens for prezzario (~3.2M chars)
+          // to leave room for prompt + user text within the 1M token limit
+          const TOKEN_CHAR_BUDGET = 3_200_000;
+          let serialized = JSON.stringify(filtered);
+
+          if (serialized.length > TOKEN_CHAR_BUDGET) {
+            let kept = filtered.length;
+            while (kept > 0 && serialized.length > TOKEN_CHAR_BUDGET) {
+              kept = Math.max(1, Math.floor(kept * 0.8));
+              serialized = JSON.stringify(filtered.slice(0, kept));
+            }
+            console.log(
+              `[TOKEN CAP] Prezzario ridotto da ${filtered.length} a ${kept} righe per rispettare il limite token Gemini`
+            );
+          }
+
+          prezzarioToSend = serialized;
         }
       } catch (e) {
         console.error("Errore nel filtraggio RAG:", e);
