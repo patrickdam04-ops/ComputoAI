@@ -188,38 +188,142 @@ export default function ComputoApp() {
   };
 
   const parseExcelFile = (file: File): Promise<{ rawText: string }[]> => {
+    type RowObj = Record<string, unknown>;
+
+    const getVal = (keywords: string[], row: RowObj): string => {
+      const keys = Object.keys(row);
+      // Exact match first (case-insensitive)
+      let key = keys.find((k) =>
+        keywords.some((kw) => k.trim().toLowerCase() === kw.toLowerCase())
+      );
+      // Partial match fallback
+      if (!key) {
+        key = keys.find((k) =>
+          keywords.some((kw) => k.trim().toLowerCase().includes(kw.toLowerCase()))
+        );
+      }
+      return key && row[key] !== undefined && row[key] !== null
+        ? String(row[key]).trim()
+        : "";
+    };
+
+    const getDescrizioneCompleta = (row: RowObj): string => {
+      const keys = Object.keys(row);
+      const descrKeys = keys.filter((k) =>
+        /descr|declar|testo|voce|articolo|capitolo/i.test(k.trim())
+      );
+      return descrKeys
+        .map((k) =>
+          row[k] !== undefined && row[k] !== null
+            ? String(row[k]).trim()
+            : ""
+        )
+        .filter((v) => v.length > 0)
+        .join(" | ");
+    };
+
+    const normalizeRow = (row: RowObj) => {
+      const codice = getVal(
+        ["codice", "codice regionale", "codice ufficiale", "tariffa", "cod"],
+        row
+      );
+      const um = getVal(["u.m.", "um", "unità di misura", "unita"], row);
+      const prezzo = getVal(
+        ["prezzo", "importo", "costo unitario", "prezzo unitario (€)", "prezzo unitario", "euro"],
+        row
+      );
+
+      let descrizione = getDescrizioneCompleta(row);
+      descrizione = descrizione
+        .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g, "")
+        .replace(/\r?\n/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .substring(0, 500);
+
+      return { codice, descrizione, um, prezzo };
+    };
+
+    function detectHeaderRow(rawData: unknown[][]): number {
+      const DETECT_KEYWORDS = ["descrizione", "declaratoria", "prezzo", "codice"];
+      for (let h = 0; h < Math.min(5, rawData.length); h++) {
+        const cells = (rawData[h] || []).map((c) =>
+          String(c ?? "").trim().toLowerCase()
+        );
+        const matches = DETECT_KEYWORDS.filter((kw) =>
+          cells.some((c) => c.includes(kw))
+        );
+        if (matches.length >= 2) return h;
+      }
+      return 0;
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (evt) => {
         try {
           const buffer = evt.target?.result;
-          const wb = XLSX.read(buffer, {
-            type: "array",
-          });
+          const wb = XLSX.read(buffer, { type: "array" });
           const rows: { rawText: string }[] = [];
 
           for (const sheetName of wb.SheetNames) {
             const ws = wb.Sheets[sheetName];
-            const rawData = XLSX.utils.sheet_to_json(ws, {
+
+            // First pass: find header row index
+            const rawArrays = XLSX.utils.sheet_to_json(ws, {
               header: 1,
             }) as unknown[][];
+            if (rawArrays.length < 2) {
+              delete wb.Sheets[sheetName];
+              continue;
+            }
+            const headerIdx = detectHeaderRow(rawArrays);
 
-            for (let i = 0; i < rawData.length; i++) {
-              const row = rawData[i];
-              const filledCells = row
-                ? (row as unknown[]).filter(
-                    (cell) =>
-                      cell !== null &&
-                      cell !== undefined &&
-                      String(cell).trim() !== ""
-                  )
-                : [];
-              if (filledCells.length >= 2) {
-                rows.push({
-                  rawText: filledCells.map((c) => String(c).trim()).join(" | "),
-                });
+            // Second pass: parse with named headers starting from detected row
+            const namedData = XLSX.utils.sheet_to_json(ws, {
+              range: headerIdx,
+            }) as RowObj[];
+
+            const originalCount = namedData.length;
+
+            const hasNamedKeys =
+              namedData.length > 0 &&
+              Object.keys(namedData[0]).some((k) =>
+                /codice|descrizione|declaratoria|prezzo|importo|u\.?m\.?/i.test(k)
+              );
+
+            if (hasNamedKeys) {
+              for (const row of namedData) {
+                const { codice, descrizione, um, prezzo } = normalizeRow(row);
+                if (descrizione.length <= 3 && !prezzo) continue;
+                const parts = [codice, descrizione, um, prezzo].filter(Boolean);
+                if (parts.length >= 2) {
+                  rows.push({ rawText: parts.join(" - ") });
+                }
+              }
+            } else {
+              // Fallback for files without recognizable headers
+              for (let i = 1; i < rawArrays.length; i++) {
+                const arr = rawArrays[i];
+                if (!arr) continue;
+                const filledCells = (arr as unknown[]).filter(
+                  (cell) =>
+                    cell !== null &&
+                    cell !== undefined &&
+                    String(cell).trim() !== ""
+                );
+                if (filledCells.length >= 2) {
+                  const text = filledCells
+                    .slice(0, 4)
+                    .map((c) => String(c).trim().substring(0, 300))
+                    .join(" - ");
+                  rows.push({ rawText: text });
+                }
               }
             }
+
+            console.log(
+              `[DEBUG RAG] Foglio "${sheetName}": Righe originali: ${originalCount} | Righe salvate: ${rows.length}`
+            );
 
             delete wb.Sheets[sheetName];
           }
@@ -324,6 +428,44 @@ export default function ComputoApp() {
     if (isPrezzarioMode && uploadedFiles.length > 0) {
       try {
         const allRows = uploadedFiles.flatMap((f) => f.rows);
+
+        // Step 1: LLM synonym expansion (Gemini Flash, streamed to avoid TTFB timeout)
+        let expandedKeywords: string[] = [];
+        try {
+          console.log("[STEP 1] Espansione sinonimi in corso...");
+          const expandRes = await fetch("/api/expand-keywords", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          if (expandRes.ok && expandRes.body) {
+            const reader = expandRes.body.getReader();
+            const decoder = new TextDecoder();
+            let raw = "";
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              raw += decoder.decode(value, { stream: true });
+            }
+            raw = raw.replace("__HEARTBEAT__\n", "").trim();
+            try {
+              const expandData = JSON.parse(raw) as { keywords?: string[] };
+              expandedKeywords = expandData.keywords ?? [];
+            } catch {
+              console.warn("[STEP 1] Parse sinonimi fallito:", raw);
+            }
+            console.log(
+              `[STEP 1] ${expandedKeywords.length} sinonimi ricevuti: ${expandedKeywords.slice(0, 20).join(", ")}${expandedKeywords.length > 20 ? "..." : ""}`
+            );
+          }
+        } catch (expandErr) {
+          console.warn(
+            "[STEP 1] Espansione sinonimi fallita, proseguo con keyword originali:",
+            expandErr
+          );
+        }
+
+        // Step 2: RAG filtering with expanded keywords (Web Worker)
         const result = await new Promise<{
           csv: string | null;
           count: number;
@@ -331,8 +473,17 @@ export default function ComputoApp() {
         }>((resolve, reject) => {
           const worker = new Worker("/rag-worker.js");
           worker.onmessage = (ev: MessageEvent) => {
-            const { filteredCsv, filteredCount, keywords } = ev.data;
+            const {
+              filteredCsv,
+              filteredCount,
+              keywords,
+              originalCount,
+              expandedCount,
+            } = ev.data;
             worker.terminate();
+            console.log(
+              `[STEP 2] Keyword originali: ${originalCount}, sinonimi LLM: ${expandedCount}, totali uniche: ${keywords?.length ?? 0}`
+            );
             resolve({
               csv: filteredCsv,
               count: filteredCount,
@@ -343,20 +494,21 @@ export default function ComputoApp() {
             worker.terminate();
             reject(err);
           };
-          worker.postMessage({ userText: text, rows: allRows });
+          worker.postMessage({
+            userText: text,
+            rows: allRows,
+            expandedKeywords,
+          });
         });
 
         if (result.keywords.length > 0) {
-          console.log(
-            `[MOTORE DI RICERCA] Parole chiave 'pulite': ${result.keywords.join(", ")}`
-          );
           console.log(
             `[MOTORE DI RICERCA] Righe filtrate: ${result.count} (cap 12000)`
           );
         }
 
         if (result.csv) {
-          const TOKEN_CHAR_BUDGET = 3_200_000;
+          const TOKEN_CHAR_BUDGET = 1_500_000;
           let csv = result.csv;
 
           if (csv.length > TOKEN_CHAR_BUDGET) {

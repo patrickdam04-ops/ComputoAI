@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     if (isPrezzarioMode) {
       prompt = `Sei un Computista Senior. Il tuo compito è estrarre TUTTE le lavorazioni dal testo, nessuna esclusa.
 
-ESTRATTO LISTINO (formato CSV, colonne separate da ";"):
+ESTRATTO LISTINO (formato: Codice - Descrizione - U.M. - Prezzo, una voce per riga):
 ${prezzarioStr}
 
 REGOLE DI FERRO:
