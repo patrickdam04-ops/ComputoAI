@@ -194,11 +194,6 @@ export default function ComputoApp() {
           const buffer = evt.target?.result;
           const wb = XLSX.read(buffer, {
             type: "array",
-            cellFormulas: false,
-            cellHTML: false,
-            cellText: false,
-            cellStyles: false,
-            sheetStubs: false,
           });
           const rows: { rawText: string }[] = [];
 
