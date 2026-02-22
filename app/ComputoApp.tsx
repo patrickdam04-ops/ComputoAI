@@ -78,7 +78,8 @@ export default function ComputoApp() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPrezzarioMode, setIsPrezzarioMode] = useState(false);
   const [prezzarioData, setPrezzarioData] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string>("");
+  const [fileNames, setFileNames] = useState<string[]>([]);
+  const [totalPrezzarioRows, setTotalPrezzarioRows] = useState(0);
   const [includePrices, setIncludePrices] = useState<boolean>(true);
   const [streamingRows, setStreamingRows] = useState<ComputoRow[]>([]);
   const [toast, setToast] = useState<string | null>(null);
@@ -185,75 +186,97 @@ export default function ComputoApp() {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const parseExcelFile = (file: File): Promise<{ rawText: string }[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: "binary" });
+          const rows: { rawText: string }[] = [];
 
-    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
-    if (ext === ".pdf") {
-      setFileUploadError(
-        "Formato non supportato. Per garantire l'assoluta precisione dei prezzi, carica il prezzario solo in formato Excel (.xlsx, .xls) o .csv"
-      );
-      e.target.value = "";
-      setTimeout(() => setFileUploadError(null), 6000);
-      return;
-    }
-    setFileUploadError(null);
-    setFileName(file.name);
+          for (const sheetName of wb.SheetNames) {
+            const ws = wb.Sheets[sheetName];
+            const rawData = XLSX.utils.sheet_to_json(ws, {
+              header: 1,
+            }) as unknown[][];
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: "binary" });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-
-        const rawData = XLSX.utils.sheet_to_json(ws, {
-          header: 1,
-        }) as unknown[][];
-
-        const cleanListino: { rawText: string }[] = [];
-
-        for (let i = 0; i < rawData.length; i++) {
-          const row = rawData[i];
-          const filledCells = row
-            ? (row as unknown[]).filter(
-                (cell) =>
-                  cell !== null &&
-                  cell !== undefined &&
-                  String(cell).trim() !== ""
-              )
-            : [];
-
-          if (filledCells.length >= 2) {
-            cleanListino.push({
-              rawText: filledCells.map((c) => String(c).trim()).join(" | "),
-            });
+            for (const row of rawData) {
+              const filledCells = row
+                ? (row as unknown[]).filter(
+                    (cell) =>
+                      cell !== null &&
+                      cell !== undefined &&
+                      String(cell).trim() !== ""
+                  )
+                : [];
+              if (filledCells.length >= 2) {
+                rows.push({
+                  rawText: filledCells.map((c) => String(c).trim()).join(" | "),
+                });
+              }
+            }
           }
+          resolve(rows);
+        } catch (error) {
+          reject(error);
         }
+      };
+      reader.readAsBinaryString(file);
+    });
+  };
 
-        if (cleanListino.length === 0) {
-          alert(
-            "Il file sembra vuoto o non contiene dati formattati a tabella."
-          );
-          setFileName("");
-          setPrezzarioData(null);
-          return;
-        }
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
 
-        setPrezzarioData(JSON.stringify(cleanListino));
-        console.log(
-          `Prezzario caricato (Modalità Agnostica): ${cleanListino.length} righe valide trovate.`
+    const validFiles: File[] = [];
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const f = selectedFiles[i];
+      const ext = f.name.toLowerCase().slice(f.name.lastIndexOf("."));
+      if (ext === ".pdf") {
+        setFileUploadError(
+          "Formato non supportato. Per garantire l'assoluta precisione dei prezzi, carica il prezzario solo in formato Excel (.xlsx, .xls) o .csv"
         );
-      } catch (error) {
-        console.error("Errore nella lettura:", error);
-        alert("Errore nella lettura del file. Prova con un formato standard.");
-        setFileName("");
-        setPrezzarioData(null);
+        e.target.value = "";
+        setTimeout(() => setFileUploadError(null), 6000);
+        return;
       }
-    };
-    reader.readAsBinaryString(file);
+      validFiles.push(f);
+    }
+
+    setFileUploadError(null);
+    setFileNames(validFiles.map((f) => f.name));
+
+    try {
+      const allRows: { rawText: string }[] = [];
+      for (const f of validFiles) {
+        const rows = await parseExcelFile(f);
+        allRows.push(...rows);
+      }
+
+      if (allRows.length === 0) {
+        alert(
+          "I file sembrano vuoti o non contengono dati formattati a tabella."
+        );
+        setFileNames([]);
+        setPrezzarioData(null);
+        setTotalPrezzarioRows(0);
+        return;
+      }
+
+      setPrezzarioData(JSON.stringify(allRows));
+      setTotalPrezzarioRows(allRows.length);
+      console.log(
+        `Prezzario caricato: ${validFiles.length} file, ${allRows.length} righe totali.`
+      );
+    } catch (error) {
+      console.error("Errore nella lettura:", error);
+      alert("Errore nella lettura dei file. Prova con un formato standard.");
+      setFileNames([]);
+      setPrezzarioData(null);
+      setTotalPrezzarioRows(0);
+    }
   };
 
   const handleAnalyze = async () => {
@@ -603,6 +626,7 @@ export default function ComputoApp() {
               <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 p-6 transition-colors hover:bg-slate-50">
                 <input
                   type="file"
+                  multiple
                   accept=".csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={handleFileUpload}
                   className="mb-4 block w-full cursor-pointer text-sm text-slate-500 file:mr-4 file:rounded-full file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
@@ -615,12 +639,24 @@ export default function ComputoApp() {
                 )}
                 <FileUp className="h-10 w-10 text-slate-400" strokeWidth={1.5} />
                 <p className="mt-2 text-center text-sm text-slate-600">
-                  Trascina qui il Prezzario Regionale o Listino (Excel, CSV)
+                  Trascina qui il Prezzario (Excel, CSV) — anche file multipli
                 </p>
-                {fileName && (
-                  <span className="mt-3 inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
-                    ✅ Listino caricato: {fileName}
-                  </span>
+                {fileNames.length > 0 && (
+                  <div className="mt-3 flex flex-col items-center gap-1">
+                    <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
+                      {fileNames.length === 1
+                        ? `✅ ${fileNames[0]}`
+                        : `✅ ${fileNames.length} file caricati`}
+                    </span>
+                    {fileNames.length > 1 && (
+                      <p className="text-xs text-slate-500">
+                        {fileNames.join(", ")}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-400">
+                      {totalPrezzarioRows.toLocaleString("it-IT")} righe totali
+                    </p>
+                  </div>
                 )}
               </div>
               <div className="relative flex items-center py-4">
