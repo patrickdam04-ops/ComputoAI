@@ -318,129 +318,41 @@ export default function ComputoApp() {
     }
 
     setIsAnalyzing(true);
-    await new Promise((r) => setTimeout(r, 0));
 
     let prezzarioToSend: string | null = prezzarioData;
 
     if (isPrezzarioMode && uploadedFiles.length > 0) {
       try {
-        const parsed = uploadedFiles.flatMap((f) => f.rows) as { rawText?: string }[];
-        const userText = text.toLowerCase();
-        // 1. Estrazione parole e rimozione Stop Words avanzate
-        const rawKeywords = userText.match(/[a-zàèìòù]{4,}/g) || [];
-        const stopWords = [
-          // Verbi e parole comuni del parlato
-          "sono",
-          "circa",
-          "tutta",
-          "tutte",
-          "tutti",
-          "dalle",
-          "dalla",
-          "della",
-          "delle",
-          "dello",
-          "degli",
-          "nella",
-          "nelle",
-          "nello",
-          "negli",
-          "come",
-          "fare",
-          "fatto",
-          "piano",
-          "zona",
-          "anche",
-          "quindi",
-          "sopra",
-          "sotto",
-          "oltre",
-          "senza",
-          "hanno",
-          "abbiamo",
-          "quest",
-          "quell",
-          "perche",
-          "dobbiamo",
-          "essere",
-          "sempre",
-          "allora",
-          "siamo",
-          "nell",
-          "facciamo",
-          "guarda",
-          "ecco",
-          "dove",
-          "quando",
-          "quanto",
-          "quello",
-          "quella",
-          "diciamo",
-          "partiamo",
-          "passiamo",
-          "invece",
-          "magari",
-          "forse",
-          "almeno",
-          "calcola",
-          "aggiungi",
-          "metti",
-          // Unità di misura e parole generiche da cantiere che 'inquinano' la ricerca
-          "metri",
-          "quadri",
-          "cubi",
-          "lineari",
-          "centimetri",
-          "spessore",
-          "altezza",
-          "lunghezza",
-          "larghezza",
-          "totali",
-          "totale",
-          "relativo",
-          "nuovo",
-          "vecchio",
-          "esistente",
-        ];
-        const keywords = rawKeywords.filter((kw) => !stopWords.includes(kw));
-
-        if (keywords.length > 0) {
-          const winnerSet = new Set<number>();
-          const winnerRows: { rawText?: string }[] = [];
-
-          for (const kw of keywords) {
-            const stem = kw.slice(0, -1);
-            const scored = parsed.map((row, idx) => {
-              const desc = (row.rawText ?? "").toLowerCase();
-              let score = 0;
-              if (desc.includes(kw)) score += 2;
-              else if (desc.includes(stem)) score += 1;
-              return { idx, row, score };
-            });
-
-            scored
-              .filter((r) => r.score > 0)
-              .sort((a, b) => b.score - a.score)
-              .slice(0, 5)
-              .forEach((r) => {
-                if (!winnerSet.has(r.idx)) {
-                  winnerSet.add(r.idx);
-                  winnerRows.push(r.row);
-                }
-              });
+        const allRows = uploadedFiles.flatMap((f) => f.rows);
+        const filtered = await new Promise<{ rawText: string }[] | null>(
+          (resolve, reject) => {
+            const worker = new Worker("/rag-worker.js");
+            worker.onmessage = (ev: MessageEvent) => {
+              const { filteredRows, keywords, totalFiltered } = ev.data;
+              if (keywords?.length > 0) {
+                console.log(
+                  `[MOTORE DI RICERCA] Parole chiave 'pulite': ${keywords.join(", ")}`
+                );
+                console.log(
+                  `[MOTORE DI RICERCA] Righe dinamiche inviate a Gemini: ${totalFiltered} (cap 12000)`
+                );
+              }
+              worker.terminate();
+              resolve(filteredRows);
+            };
+            worker.onerror = (err) => {
+              worker.terminate();
+              reject(err);
+            };
+            worker.postMessage({ userText: text, rows: allRows });
           }
+        );
 
-          const cappedRows = winnerRows.slice(0, 12000);
-          prezzarioToSend = JSON.stringify(cappedRows);
-          console.log(
-            `[MOTORE DI RICERCA] Parole chiave 'pulite': ${keywords.join(", ")}`
-          );
-          console.log(
-            `[MOTORE DI RICERCA] Righe dinamiche inviate a Gemini: ${cappedRows.length} (cap 12000)`
-          );
+        if (filtered) {
+          prezzarioToSend = JSON.stringify(filtered);
         }
       } catch (e) {
-        console.error("Errore nel filtraggio:", e);
+        console.error("Errore nel filtraggio RAG:", e);
       }
     }
 
