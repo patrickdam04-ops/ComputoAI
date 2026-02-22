@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Mic, Download, FileUp, Square, Wand2 } from "lucide-react";
+import { Mic, Download, FileUp, Square, Wand2, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import { downloadComputoExcel } from "@/lib/downloadExcel";
 import { useCredits } from "@/providers/CreditsContext";
@@ -78,8 +78,9 @@ export default function ComputoApp() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPrezzarioMode, setIsPrezzarioMode] = useState(false);
   const [prezzarioData, setPrezzarioData] = useState<string | null>(null);
-  const [fileNames, setFileNames] = useState<string[]>([]);
-  const [totalPrezzarioRows, setTotalPrezzarioRows] = useState(0);
+  const [uploadedFiles, setUploadedFiles] = useState<
+    { name: string; size: number; rowCount: number; rows: { rawText: string }[] }[]
+  >([]);
   const [includePrices, setIncludePrices] = useState<boolean>(true);
   const [streamingRows, setStreamingRows] = useState<ComputoRow[]>([]);
   const [toast, setToast] = useState<string | null>(null);
@@ -231,11 +232,30 @@ export default function ComputoApp() {
     });
   };
 
+  const rebuildPrezzario = (
+    files: { rows: { rawText: string }[] }[]
+  ) => {
+    const allRows = files.flatMap((f) => f.rows);
+    if (allRows.length > 0) {
+      setPrezzarioData(JSON.stringify(allRows));
+    } else {
+      setPrezzarioData(null);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setUploadedFiles((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      rebuildPrezzario(next);
+      return next;
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles || selectedFiles.length === 0) return;
 
-    const validFiles: File[] = [];
+    const newFiles: File[] = [];
     for (let i = 0; i < selectedFiles.length; i++) {
       const f = selectedFiles[i];
       const ext = f.name.toLowerCase().slice(f.name.lastIndexOf("."));
@@ -247,40 +267,46 @@ export default function ComputoApp() {
         setTimeout(() => setFileUploadError(null), 6000);
         return;
       }
-      validFiles.push(f);
+      newFiles.push(f);
     }
-
+    e.target.value = "";
     setFileUploadError(null);
-    setFileNames(validFiles.map((f) => f.name));
 
     try {
-      const allRows: { rawText: string }[] = [];
-      for (const f of validFiles) {
+      const addedFiles: typeof uploadedFiles = [];
+      for (const f of newFiles) {
+        const isDuplicate = uploadedFiles.some(
+          (existing) => existing.name === f.name && existing.size === f.size
+        );
+        if (isDuplicate) continue;
+
         const rows = await parseExcelFile(f);
-        allRows.push(...rows);
+        if (rows.length > 0) {
+          addedFiles.push({
+            name: f.name,
+            size: f.size,
+            rowCount: rows.length,
+            rows,
+          });
+        }
       }
 
-      if (allRows.length === 0) {
+      if (addedFiles.length === 0 && uploadedFiles.length === 0) {
         alert(
           "I file sembrano vuoti o non contengono dati formattati a tabella."
         );
-        setFileNames([]);
-        setPrezzarioData(null);
-        setTotalPrezzarioRows(0);
         return;
       }
 
-      setPrezzarioData(JSON.stringify(allRows));
-      setTotalPrezzarioRows(allRows.length);
+      const combined = [...uploadedFiles, ...addedFiles];
+      setUploadedFiles(combined);
+      rebuildPrezzario(combined);
       console.log(
-        `Prezzario caricato: ${validFiles.length} file, ${allRows.length} righe totali.`
+        `Prezzario: ${combined.length} file, ${combined.reduce((s, f) => s + f.rowCount, 0)} righe totali.`
       );
     } catch (error) {
       console.error("Errore nella lettura:", error);
       alert("Errore nella lettura dei file. Prova con un formato standard.");
-      setFileNames([]);
-      setPrezzarioData(null);
-      setTotalPrezzarioRows(0);
     }
   };
 
@@ -646,20 +672,33 @@ export default function ComputoApp() {
                 <p className="mt-2 text-center text-sm text-slate-600">
                   Trascina qui il Prezzario (Excel, CSV) — anche file multipli
                 </p>
-                {fileNames.length > 0 && (
-                  <div className="mt-3 flex flex-col items-center gap-1">
-                    <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
-                      {fileNames.length === 1
-                        ? `✅ ${fileNames[0]}`
-                        : `✅ ${fileNames.length} file caricati`}
-                    </span>
-                    {fileNames.length > 1 && (
-                      <p className="text-xs text-slate-500">
-                        {fileNames.join(", ")}
-                      </p>
-                    )}
-                    <p className="text-xs text-slate-400">
-                      {totalPrezzarioRows.toLocaleString("it-IT")} righe totali
+                {uploadedFiles.length > 0 && (
+                  <div className="mt-3 flex w-full flex-col gap-2">
+                    {uploadedFiles.map((uf, idx) => (
+                      <div
+                        key={`${uf.name}-${uf.size}`}
+                        className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 px-3 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-green-800">
+                            {uf.name}
+                          </p>
+                          <p className="text-xs text-green-600">
+                            {uf.rowCount.toLocaleString("it-IT")} righe
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(idx)}
+                          className="ml-2 shrink-0 rounded-full p-1 text-red-400 transition hover:bg-red-100 hover:text-red-600"
+                          aria-label={`Rimuovi ${uf.name}`}
+                        >
+                          <X className="h-4 w-4" strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    ))}
+                    <p className="text-center text-xs text-slate-400">
+                      {uploadedFiles.reduce((s, f) => s + f.rowCount, 0).toLocaleString("it-IT")} righe totali
                     </p>
                   </div>
                 )}
