@@ -5,6 +5,7 @@ import { Mic, Download, FileUp, Square, Wand2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import CronologiaComputi from "@/components/CronologiaComputi";
 import { downloadComputoExcel } from "@/lib/downloadExcel";
+import { useCredits } from "@/providers/CreditsContext";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -68,6 +69,7 @@ function extractJsonObjects(text: string, startFrom: number) {
 }
 
 export default function ComputoApp() {
+  const { deductCredits } = useCredits();
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -167,6 +169,7 @@ export default function ComputoApp() {
       const data = (await res.json()) as { text: string };
       setTranscription(data.text ?? "");
       setAudioBlob(null);
+      deductCredits(1);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Errore durante la trascrizione");
     } finally {
@@ -460,6 +463,7 @@ export default function ComputoApp() {
       setComputoData(allRows);
 
       if (allRows.length > 0) {
+        deductCredits(isPrezzarioMode ? 10 : 1);
         setHistoryRefresh((n) => n + 1);
         setToast("Computo salvato automaticamente nella tua cronologia");
         setTimeout(() => setToast(null), 4000);

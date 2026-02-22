@@ -1,21 +1,20 @@
-import { auth } from "@clerk/nextjs/server";
-import { supabaseAdmin } from "@/lib/supabase";
+"use client";
 
-export default async function CreditBadge() {
-  const { userId } = await auth();
+import { useCredits } from "@/providers/CreditsContext";
 
-  let balance = 0;
-  if (userId) {
-    const { data: row, error } = await supabaseAdmin
-      .from("user_credits")
-      .select("credits_balance")
-      .eq("clerk_user_id", userId)
-      .maybeSingle();
-    balance = error || !row ? 0 : Number(row.credits_balance ?? 0);
+export default function CreditBadge() {
+  const { credits, loading } = useCredits();
+
+  if (loading) {
+    return (
+      <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold shadow-sm bg-slate-100 text-slate-400">
+        <span aria-hidden>⚡</span>
+        <span>...</span>
+      </div>
+    );
   }
 
-  const isLow = balance <= 0;
-  if (isLow) {
+  if (credits <= 0) {
     return (
       <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold text-red-600 bg-red-100 shadow-sm border border-red-200">
         <span aria-hidden>⚡</span>
@@ -23,10 +22,11 @@ export default async function CreditBadge() {
       </div>
     );
   }
+
   return (
-    <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold shadow-sm bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+    <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold shadow-sm bg-emerald-100 text-emerald-800">
       <span aria-hidden>⚡</span>
-      <span>Crediti: {balance}</span>
+      <span>Crediti: {credits}</span>
     </div>
   );
 }
