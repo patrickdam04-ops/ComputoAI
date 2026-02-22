@@ -82,6 +82,7 @@ export default function ComputoApp() {
   const [includePrices, setIncludePrices] = useState<boolean>(true);
   const [streamingRows, setStreamingRows] = useState<ComputoRow[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [fileUploadError, setFileUploadError] = useState<string | null>(null);
 
   const previewScrollRef = useRef<HTMLDivElement>(null);
 
@@ -187,6 +188,17 @@ export default function ComputoApp() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    if (ext === ".pdf") {
+      setFileUploadError(
+        "Formato non supportato. Per garantire l'assoluta precisione dei prezzi, carica il prezzario solo in formato Excel (.xlsx, .xls) o .csv"
+      );
+      e.target.value = "";
+      setTimeout(() => setFileUploadError(null), 6000);
+      return;
+    }
+    setFileUploadError(null);
     setFileName(file.name);
 
     const reader = new FileReader();
@@ -591,13 +603,19 @@ export default function ComputoApp() {
               <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 p-6 transition-colors hover:bg-slate-50">
                 <input
                   type="file"
+                  accept=".csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={handleFileUpload}
                   className="mb-4 block w-full cursor-pointer text-sm text-slate-500 file:mr-4 file:rounded-full file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
                   aria-label="Carica Prezzario o Listino"
                 />
+                {fileUploadError && (
+                  <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
+                    {fileUploadError}
+                  </p>
+                )}
                 <FileUp className="h-10 w-10 text-slate-400" strokeWidth={1.5} />
                 <p className="mt-2 text-center text-sm text-slate-600">
-                  Trascina qui il Prezzario Regionale o Listino (PDF, Excel)
+                  Trascina qui il Prezzario Regionale o Listino (Excel, CSV)
                 </p>
                 {fileName && (
                   <span className="mt-3 inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
