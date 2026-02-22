@@ -116,38 +116,37 @@ export default function CronologiaComputi({
   };
 
   return (
-    <div className="mt-8 rounded-xl border border-slate-200 bg-white shadow-sm max-md:hidden">
+    <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm max-md:hidden">
       <button
         type="button"
         onClick={() => setIsOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-5 py-4 text-left"
+        className="flex w-full items-center justify-between text-left"
       >
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+          I miei Computi
+        </h3>
         <div className="flex items-center gap-2">
-          <Clock className="h-5 w-5 text-slate-500" strokeWidth={2} />
-          <h3 className="text-base font-semibold text-slate-800">
-            I miei Computi
-          </h3>
           {entries.length > 0 && (
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
               {entries.length}
             </span>
           )}
+          {isOpen ? (
+            <ChevronUp className="h-5 w-5 text-slate-400" />
+          ) : (
+            <ChevronDown className="h-5 w-5 text-slate-400" />
+          )}
         </div>
-        {isOpen ? (
-          <ChevronUp className="h-5 w-5 text-slate-400" />
-        ) : (
-          <ChevronDown className="h-5 w-5 text-slate-400" />
-        )}
       </button>
 
       {isOpen && (
-        <div className="border-t border-slate-100 px-5 pb-4">
+        <div className="mt-4 border-t border-slate-200 pt-4">
           {loading ? (
-            <p className="py-6 text-center text-sm text-slate-400">
+            <p className="py-6 text-center text-sm text-slate-600">
               Caricamento...
             </p>
           ) : entries.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-400">
+            <p className="py-6 text-center text-sm text-slate-600">
               Nessun computo salvato
             </p>
           ) : (
@@ -155,16 +154,16 @@ export default function CronologiaComputi({
               <table className="w-full text-left text-sm">
                 <thead className="sticky top-0 bg-white">
                   <tr className="border-b border-slate-200">
-                    <th className="py-2 pr-4 font-semibold text-slate-600">
+                    <th className="py-2 pr-4 font-semibold text-slate-900">
                       Data
                     </th>
-                    <th className="py-2 pr-4 font-semibold text-slate-600">
+                    <th className="py-2 pr-4 font-semibold text-slate-900">
                       Titolo
                     </th>
-                    <th className="py-2 pr-4 font-semibold text-slate-600">
+                    <th className="py-2 pr-4 font-semibold text-slate-900">
                       Modalità
                     </th>
-                    <th className="py-2 font-semibold text-slate-600">
+                    <th className="py-2 font-semibold text-slate-900">
                       Voci
                     </th>
                     <th className="py-2" />

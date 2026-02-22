@@ -584,12 +584,14 @@ export default function ComputoApp() {
       {/* Vista Desktop: da md in su. Su telefono nascosta così il testo/analisi non appare mai. */}
       <section className="max-md:!hidden md:grid md:grid-cols-2 gap-8 h-[85vh]">
         {/* Colonna sinistra: Input Dati */}
-        <div className="flex flex-col gap-4 min-h-0 overflow-auto">
-          <h2 className="text-lg font-semibold text-slate-800">Input Dati</h2>
-
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-3">
+            Input Dati
+          </h2>
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
           {isPrezzarioMode && (
             <>
-              <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 p-6 transition-colors hover:bg-slate-50">
+              <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 p-6 transition-colors hover:bg-slate-50">
                 <input
                   type="file"
                   onChange={handleFileUpload}
@@ -618,28 +620,29 @@ export default function ComputoApp() {
 
           {/* Textarea appunti */}
           <textarea
-            className="min-h-[180px] w-full flex-1 resize-none rounded-xl border border-slate-200 bg-white p-4 shadow-sm placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-300"
+            className="min-h-[180px] w-full flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-900 placeholder:text-slate-400 focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-300"
             placeholder="Oppure incolla qui gli appunti testuali del sopralluogo..."
             rows={6}
             value={transcription}
             onChange={(e) => setTranscription(e.target.value)}
           />
+          </div>
         </div>
 
         {/* Colonna destra: Anteprima Computo */}
-        <div className="flex flex-col gap-4 min-h-0">
-          <h2 className="text-lg font-semibold text-slate-800">
+        <div className="flex min-h-0 flex-col gap-4 overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-0">
             Anteprima Computo
           </h2>
           <div
             ref={previewScrollRef}
-            className="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm"
+            className="flex-1 min-h-0 overflow-auto rounded-lg border border-slate-200 bg-slate-50"
           >
             {(() => {
               const displayRows = isAnalyzing ? streamingRows : computoData;
               if (displayRows.length === 0) {
                 return (
-                  <p className="flex h-full items-center justify-center p-6 text-slate-500">
+                  <p className="flex h-full items-center justify-center p-6 text-slate-600">
                     {isAnalyzing
                       ? "Connessione a Gemini in corso..."
                       : "Nessun dato analizzato"}
@@ -650,17 +653,17 @@ export default function ComputoApp() {
                 <>
                   <table className="w-full border-collapse text-left text-sm">
                     <thead className="sticky top-0 z-10">
-                      <tr className="border-b border-slate-200 bg-slate-50">
-                        <th className="p-3 font-semibold text-slate-700">
+                      <tr className="border-b border-slate-200 bg-slate-100">
+                        <th className="p-3 font-semibold text-slate-900">
                           Categoria
                         </th>
-                        <th className="p-3 font-semibold text-slate-700">
+                        <th className="p-3 font-semibold text-slate-900">
                           Descrizione
                         </th>
-                        <th className="p-3 font-semibold text-slate-700">
+                        <th className="p-3 font-semibold text-slate-900">
                           U.M.
                         </th>
-                        <th className="p-3 font-semibold text-slate-700">
+                        <th className="p-3 font-semibold text-slate-900">
                           Q.tà
                         </th>
                       </tr>
@@ -675,10 +678,10 @@ export default function ComputoApp() {
                               : "hover:bg-slate-50/50"
                           }`}
                         >
-                          <td className="p-3 text-slate-700">
+                          <td className="p-3 text-slate-900">
                             {row.categoria}
                           </td>
-                          <td className="p-3 text-slate-700">
+                          <td className="p-3 text-slate-600">
                             {row.descrizione}
                           </td>
                           <td className="p-3 text-slate-600">{row.um}</td>
@@ -728,7 +731,7 @@ export default function ComputoApp() {
             type="button"
             onClick={handleAnalyze}
             disabled={isAnalyzing}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-800 px-4 py-3 font-medium text-white shadow transition hover:bg-blue-900 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white shadow-md transition-all hover:bg-indigo-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <Wand2 className="h-5 w-5" strokeWidth={2} />
             {isAnalyzing ? "Analisi in corso..." : "Analizza Dati"}

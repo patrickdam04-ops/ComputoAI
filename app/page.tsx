@@ -13,8 +13,10 @@ export default async function Home() {
       </SignedOut>
       <SignedIn>
         <div className="min-h-screen bg-slate-50 relative">
-          <header className="fixed top-0 left-0 w-full bg-white shadow-md border-b z-[100] flex justify-between items-center px-4 md:px-8 h-16">
-            <h1 className="text-xl font-bold text-slate-800">Computo AI</h1>
+          <header className="fixed top-0 left-0 w-full bg-white border-b border-slate-200 z-[100] flex justify-between items-center px-4 md:px-8 h-16">
+            <h1 className="text-xl font-extrabold tracking-tight text-indigo-900">
+              Computo AI
+            </h1>
             <div className="flex items-center gap-3">
               <Link
                 href="/archivio"
