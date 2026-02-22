@@ -41,12 +41,19 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
+    const prezzarioStr = prezzario ?? "";
+    if (isPrezzarioMode && prezzarioStr) {
+      console.log(
+        `[PAYLOAD GEMINI] Prezzario: ${prezzarioStr.length} caratteri (~${Math.round(prezzarioStr.length / 4)} token stimati)`
+      );
+    }
+
     let prompt = "";
     if (isPrezzarioMode) {
       prompt = `Sei un Computista Senior. Il tuo compito è estrarre TUTTE le lavorazioni dal testo, nessuna esclusa.
 
-ESTRATTO LISTINO:
-${prezzario ?? "[]"}
+ESTRATTO LISTINO (formato CSV, colonne separate da ";"):
+${prezzarioStr}
 
 REGOLE DI FERRO:
 1. COMPLETEZZA: Estrai ogni singola lavorazione richiesta.

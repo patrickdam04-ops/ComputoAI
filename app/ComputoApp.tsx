@@ -319,53 +319,62 @@ export default function ComputoApp() {
 
     setIsAnalyzing(true);
 
-    let prezzarioToSend: string | null = prezzarioData;
+    let prezzarioToSend: string | null = null;
 
     if (isPrezzarioMode && uploadedFiles.length > 0) {
       try {
         const allRows = uploadedFiles.flatMap((f) => f.rows);
-        const filtered = await new Promise<{ rawText: string }[] | null>(
-          (resolve, reject) => {
-            const worker = new Worker("/rag-worker.js");
-            worker.onmessage = (ev: MessageEvent) => {
-              const { filteredRows, keywords, totalFiltered } = ev.data;
-              if (keywords?.length > 0) {
-                console.log(
-                  `[MOTORE DI RICERCA] Parole chiave 'pulite': ${keywords.join(", ")}`
-                );
-                console.log(
-                  `[MOTORE DI RICERCA] Righe dinamiche inviate a Gemini: ${totalFiltered} (cap 12000)`
-                );
-              }
-              worker.terminate();
-              resolve(filteredRows);
-            };
-            worker.onerror = (err) => {
-              worker.terminate();
-              reject(err);
-            };
-            worker.postMessage({ userText: text, rows: allRows });
-          }
-        );
+        const result = await new Promise<{
+          csv: string | null;
+          count: number;
+          keywords: string[];
+        }>((resolve, reject) => {
+          const worker = new Worker("/rag-worker.js");
+          worker.onmessage = (ev: MessageEvent) => {
+            const { filteredCsv, filteredCount, keywords } = ev.data;
+            worker.terminate();
+            resolve({
+              csv: filteredCsv,
+              count: filteredCount,
+              keywords: keywords ?? [],
+            });
+          };
+          worker.onerror = (err) => {
+            worker.terminate();
+            reject(err);
+          };
+          worker.postMessage({ userText: text, rows: allRows });
+        });
 
-        if (filtered && filtered.length > 0) {
-          // ~4 chars per token, cap at 800k tokens for prezzario (~3.2M chars)
-          // to leave room for prompt + user text within the 1M token limit
+        if (result.keywords.length > 0) {
+          console.log(
+            `[MOTORE DI RICERCA] Parole chiave 'pulite': ${result.keywords.join(", ")}`
+          );
+          console.log(
+            `[MOTORE DI RICERCA] Righe filtrate: ${result.count} (cap 12000)`
+          );
+        }
+
+        if (result.csv) {
           const TOKEN_CHAR_BUDGET = 3_200_000;
-          let serialized = JSON.stringify(filtered);
+          let csv = result.csv;
 
-          if (serialized.length > TOKEN_CHAR_BUDGET) {
-            let kept = filtered.length;
-            while (kept > 0 && serialized.length > TOKEN_CHAR_BUDGET) {
-              kept = Math.max(1, Math.floor(kept * 0.8));
-              serialized = JSON.stringify(filtered.slice(0, kept));
+          if (csv.length > TOKEN_CHAR_BUDGET) {
+            const lines = csv.split("\n");
+            const originalCount = lines.length;
+            while (lines.length > 1 && lines.join("\n").length > TOKEN_CHAR_BUDGET) {
+              lines.length = Math.max(1, Math.floor(lines.length * 0.8));
             }
+            csv = lines.join("\n");
             console.log(
-              `[TOKEN CAP] Prezzario ridotto da ${filtered.length} a ${kept} righe per rispettare il limite token Gemini`
+              `[TOKEN CAP] Prezzario ridotto da ${originalCount} a ${lines.length} righe per rispettare il limite token Gemini`
             );
           }
 
-          prezzarioToSend = serialized;
+          console.log(
+            `[PAYLOAD] Prezzario finale: ${csv.length.toLocaleString("it-IT")} caratteri (~${Math.round(csv.length / 4).toLocaleString("it-IT")} token stimati)`
+          );
+          prezzarioToSend = csv;
         }
       } catch (e) {
         console.error("Errore nel filtraggio RAG:", e);

@@ -1,6 +1,7 @@
 // Web Worker: RAG keyword scoring for prezzario filtering.
 // Runs off the main thread to prevent UI freezes on large datasets.
-// Returns rows sorted by cumulative relevance score (most useful first).
+// Returns rows sorted by cumulative relevance score (most useful first)
+// in compact CSV format to minimize token usage.
 
 const STOP_WORDS = new Set([
   "sono","circa","tutta","tutte","tutti","dalle","dalla","della","delle","dello",
@@ -16,6 +17,28 @@ const STOP_WORDS = new Set([
 
 const MAX_ROWS = 12000;
 const TOP_PER_KEYWORD = 5;
+const MAX_DESC_CHARS = 300;
+
+function cleanText(s) {
+  return s
+    .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g, "")
+    .replace(/\r\n/g, " ")
+    .replace(/\n+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function rowToCompactLine(rawText) {
+  const parts = rawText.split("|").map((p) => cleanText(p));
+  if (parts.length <= 1) return cleanText(rawText).substring(0, MAX_DESC_CHARS);
+
+  // Heuristic: typically Codice | Descrizione... | UM | Prezzo
+  // Keep all parts but truncate long description fields
+  const cleaned = parts.map((p) =>
+    p.length > MAX_DESC_CHARS ? p.substring(0, MAX_DESC_CHARS) : p
+  );
+  return cleaned.join(";");
+}
 
 self.onmessage = function (e) {
   const { userText, rows } = e.data;
@@ -24,7 +47,7 @@ self.onmessage = function (e) {
   const keywords = rawKeywords.filter((kw) => !STOP_WORDS.has(kw));
 
   if (keywords.length === 0) {
-    self.postMessage({ filteredRows: null, keywords: [] });
+    self.postMessage({ filteredCsv: null, filteredCount: 0, keywords: [] });
     return;
   }
 
@@ -33,7 +56,6 @@ self.onmessage = function (e) {
     descs[i] = (rows[i].rawText || "").toLowerCase();
   }
 
-  // Track cumulative score per row index
   const scoreMap = new Map();
   const selectedIndices = new Set();
 
@@ -66,18 +88,23 @@ self.onmessage = function (e) {
     if (selectedIndices.size >= MAX_ROWS) break;
   }
 
-  // Build array with scores, sort by relevance (highest first)
   const scored = [];
   for (const idx of selectedIndices) {
     scored.push({ idx, score: scoreMap.get(idx) || 0 });
   }
   scored.sort((a, b) => b.score - a.score);
 
-  const sortedRows = scored.slice(0, MAX_ROWS).map((s) => rows[s.idx]);
+  const sortedEntries = scored.slice(0, MAX_ROWS);
+
+  // Build compact CSV: one line per row, semicolon-separated, cleaned
+  const csvLines = sortedEntries.map((s) =>
+    rowToCompactLine(rows[s.idx].rawText || "")
+  );
+  const csvString = csvLines.join("\n");
 
   self.postMessage({
-    filteredRows: sortedRows,
+    filteredCsv: csvString,
+    filteredCount: csvLines.length,
     keywords: keywords,
-    totalFiltered: sortedRows.length,
   });
 };
