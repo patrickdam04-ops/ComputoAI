@@ -191,8 +191,15 @@ export default function ComputoApp() {
       const reader = new FileReader();
       reader.onload = (evt) => {
         try {
-          const bstr = evt.target?.result;
-          const wb = XLSX.read(bstr, { type: "binary" });
+          const buffer = evt.target?.result;
+          const wb = XLSX.read(buffer, {
+            type: "array",
+            cellFormulas: false,
+            cellHTML: false,
+            cellText: false,
+            cellStyles: false,
+            sheetStubs: false,
+          });
           const rows: { rawText: string }[] = [];
 
           for (const sheetName of wb.SheetNames) {
@@ -201,7 +208,8 @@ export default function ComputoApp() {
               header: 1,
             }) as unknown[][];
 
-            for (const row of rawData) {
+            for (let i = 0; i < rawData.length; i++) {
+              const row = rawData[i];
               const filledCells = row
                 ? (row as unknown[]).filter(
                     (cell) =>
@@ -216,13 +224,15 @@ export default function ComputoApp() {
                 });
               }
             }
+
+            delete wb.Sheets[sheetName];
           }
           resolve(rows);
         } catch (error) {
           reject(error);
         }
       };
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
     });
   };
 
